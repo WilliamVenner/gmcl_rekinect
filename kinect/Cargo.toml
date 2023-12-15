@@ -1,0 +1,12 @@
+[package]
+name = "kinect"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "gm_kinect32"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+kinect-v1 = { path = "../kinect-v1" }

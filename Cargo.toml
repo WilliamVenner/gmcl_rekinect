@@ -1,0 +1,19 @@
+[package]
+name = "gm_kinect"
+version = "0.1.0"
+edition = "2021"
+authors = ["William Venner <william@venner.io>"]
+publish = false
+
+[workspace]
+members = ["kinect", "kinect-v1"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gmod = "17"
+memmap = "0.7"
+
+[target.'cfg(target_pointer_width = "64")'.dependencies]
+kinect = { path = "kinect" }

@@ -1,0 +1,12 @@
+[package]
+name = "kinect-v1"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+windows = "0.52"
+
+[build-dependencies]
+cc = "1"
+build_cfg = "1"
