@@ -1,5 +1,5 @@
 [package]
-name = "gm_rekinect_winsdk_v1"
+name = "gm_rekinect_winsdk_v2"
 version = "0.1.0"
 edition = "2021"
 publish = false

@@ -25,6 +25,11 @@ impl KinectTrackedSkeleton {
 	}
 
 	#[inline(always)]
+	pub fn from_named_bones(bones: KinectSkeletonBones) -> Self {
+		Self { bones }
+	}
+
+	#[inline(always)]
 	pub fn raw_bones(&self) -> &KinectSkeletonRawBones {
 		unsafe { &self.raw_bones }
 	}
@@ -77,37 +82,49 @@ pub struct Kinect {
 }
 impl Kinect {
 	pub fn new() -> Result<Self, std::io::Error> {
-		unsafe fn load_rekinect_dyn(lib: &str) -> Result<Kinect, std::io::Error> {
-			type GmKinectDynInit = unsafe extern "Rust" fn() -> Result<Box<dyn KinectBackend>, std::io::Error>;
+		unsafe fn load_rekinect_dyn(backend: &str) -> Option<Kinect> {
+			// This function looks kind of weird because we need to be careful about the drop order of the libloading::Library.
+			// If we drop the library too early, we might crash in the logging calls when we try to print the error that it returned
+			// (as the error is part of that library's address space, which would be deallocated when we drop the library)
 
-			let lib = libloading::Library::new(lib).map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+			type GmKinectDynInit = unsafe extern "Rust" fn(&'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error>;
 
-			let init = lib
-				.get::<GmKinectDynInit>(b"gm_rekinect_init")
-				.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+			let lib = libloading::Library::new(backend);
+			let lib = lib.and_then(|lib| Ok((*lib.get::<GmKinectDynInit>(b"gm_rekinect_init")?, lib)));
 
-			init().map(|backend| Kinect { _lib: lib, backend })
+			match lib {
+				Ok((init, lib)) => match init(log::logger()) {
+					Ok(kinect) => {
+						log::info!("{}: OK!", backend);
+						Some(Kinect { _lib: lib, backend: kinect })
+					}
+
+					Err(err) => {
+						log::warn!("{}: {err:?}", backend);
+						None
+					}
+				},
+
+				Err(err) => {
+					log::warn!("{}: {err:?}", backend);
+					None
+				}
+			}
 		}
 
 		macro_rules! try_load_backend {
 			($backend:literal) => {
-				match { unsafe { load_rekinect_dyn(concat!("garrysmod/bin/", $backend)) }.or_else(|_| unsafe { load_rekinect_dyn($backend) }) } {
-					Err(err) => log::warn!("{}: {err:?}", $backend),
-					backend @ Ok(_) => {
-						log::info!("{}: OK!", $backend);
-						return backend;
+				for backend in [concat!("garrysmod/lua/bin/", $backend), $backend] {
+					if let Some(backend) = unsafe { load_rekinect_dyn(backend) } {
+						return Ok(backend);
 					}
 				}
 			};
 		}
 
 		if cfg!(windows) {
+			try_load_backend!("gm_rekinect_winsdk_v2.dll");
 			try_load_backend!("gm_rekinect_winsdk_v1.dll");
-			try_load_backend!("gm_rekinect_libfreenect.dll");
-		} else if cfg!(target_os = "linux") {
-			try_load_backend!("libgm_rekinect_libfreenect.so");
-		} else if cfg!(target_os = "macos") {
-			try_load_backend!("libgm_rekinect_libfreenect.dylib");
 		}
 
 		Err(std::io::Error::new(

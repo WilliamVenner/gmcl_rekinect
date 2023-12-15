@@ -32,14 +32,14 @@ public:
 	WinSdkKinectV1(WinSdkKinectV1Callback callback, void *userdata);
 	~WinSdkKinectV1();
 
-	HRESULT Run();
+	void Run();
+
+	/// Create the first connected Kinect found
+	HRESULT CreateFirstConnected();
 
 	void *m_pCallbackUserData;
 
 private:
-	/// Create the first connected Kinect found
-	HRESULT CreateFirstConnected();
-
 	void Update();
 
 	/// Handle new skeleton data
@@ -57,22 +57,32 @@ private:
 	NUI_SKELETON_TRACKING_STATE m_SkeletonTrackingStates[NUI_SKELETON_COUNT];
 };
 
-extern "C" WinSdkKinectV1 *WinSdkKinectV1_Create(WinSdkKinectV1Callback callback, void *userdata)
+extern "C" WinSdkKinectV1 *WinSdkKinectV1_Create(WinSdkKinectV1Callback callback, void *userdata, HRESULT *result)
 {
-	return new WinSdkKinectV1(callback, userdata);
+	WinSdkKinectV1 *pKinect = new WinSdkKinectV1(callback, userdata);
+
+	*result = pKinect->CreateFirstConnected();
+
+	if (FAILED(*result))
+	{
+		return NULL;
+	}
+	else
+	{
+		*result = S_OK;
+		return pKinect;
+	}
 }
 
-extern "C" void WinSdkKinectV1_Destroy(WinSdkKinectV1 *pKinect, DWORD threadId)
+extern "C" void WinSdkKinectV1_Destroy(WinSdkKinectV1 *pKinect)
 {
-	PostThreadMessageW(threadId, WM_QUIT, 0, 0);
-
 	if (pKinect != NULL)
 	{
 		delete pKinect;
 	}
 }
 
-extern "C" HRESULT WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
+extern "C" void WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
 {
-	return pKinect->Run();
+	pKinect->Run();
 }

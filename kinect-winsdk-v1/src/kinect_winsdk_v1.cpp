@@ -12,11 +12,11 @@ inline void SafeRelease(Interface *&pInterfaceToRelease)
 
 WinSdkKinectV1::WinSdkKinectV1(
 	WinSdkKinectV1Callback callback, void *userdata) : m_hNextSkeletonEvent(INVALID_HANDLE_VALUE),
-												 m_pSkeletonStreamHandle(INVALID_HANDLE_VALUE),
-												 m_bSeatedMode(false),
-												 m_pNuiSensor(NULL),
-												 m_Callback(callback),
-												 m_pCallbackUserData(userdata)
+													   m_pSkeletonStreamHandle(INVALID_HANDLE_VALUE),
+													   m_bSeatedMode(false),
+													   m_pNuiSensor(NULL),
+													   m_Callback(callback),
+													   m_pCallbackUserData(userdata)
 {
 	for (int i = 0; i < NUI_SKELETON_COUNT; ++i)
 	{
@@ -39,14 +39,8 @@ WinSdkKinectV1::~WinSdkKinectV1()
 	SafeRelease(m_pNuiSensor);
 }
 
-HRESULT WinSdkKinectV1::Run()
+void WinSdkKinectV1::Run()
 {
-	HRESULT hr = CreateFirstConnected();
-	if (FAILED(hr))
-	{
-		return hr;
-	}
-
 	MSG msg = {0};
 
 	const int eventCount = 1;
@@ -72,8 +66,6 @@ HRESULT WinSdkKinectV1::Run()
 			DispatchMessageW(&msg);
 		}
 	}
-
-	return S_OK;
 }
 
 void WinSdkKinectV1::Update()
@@ -128,6 +120,7 @@ HRESULT WinSdkKinectV1::CreateFirstConnected()
 	{
 		// Initialize the Kinect and specify that we'll be using skeleton
 		hr = m_pNuiSensor->NuiInitialize(NUI_INITIALIZE_FLAG_USES_SKELETON);
+
 		if (SUCCEEDED(hr))
 		{
 			// Create an event that will be signaled when skeleton data is available
@@ -138,7 +131,7 @@ HRESULT WinSdkKinectV1::CreateFirstConnected()
 		}
 	}
 
-	if (NULL == m_pNuiSensor || FAILED(hr))
+	if (NULL == m_pNuiSensor)
 	{
 		return E_FAIL;
 	}

@@ -1,4 +1,4 @@
-// cargo build --all && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmcl_rekinect_win64.dll" && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmsv_rekinect_win64.dll"
+// cargo build --all && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmcl_rekinect_win64.dll" && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmsv_rekinect_win64.dll" && cp target/debug/gm_rekinect_winsdk_v2.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gm_rekinect_winsdk_v2.dll" && cp target/debug/gm_rekinect_winsdk_v1.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gm_rekinect_winsdk_v1.dll"
 #![feature(array_chunks)]
 #![feature(c_unwind)]
 #![feature(option_get_or_insert_default)]
@@ -19,6 +19,29 @@ use std::{
 
 thread_local! {
 	static LUA_STATE: Cell<Option<gmod::lua::State>> = Cell::new(None);
+}
+
+struct Logger;
+impl log::Log for Logger {
+	fn log(&self, record: &log::Record) {
+		let Some(lua) = LUA_STATE.get() else { return };
+		unsafe {
+			lua.get_global(lua_string!("print"));
+			lua.push_string(&if record.level() != log::Level::Info {
+				format!("gm_rekinect: [{}] {}", record.level(), record.args())
+			} else {
+				format!("gm_rekinect: {}", record.args())
+			});
+			lua.call(1, 0);
+		}
+	}
+
+	#[inline]
+	fn enabled(&self, metadata: &log::Metadata) -> bool {
+		metadata.level() <= log::Level::Info
+	}
+
+	fn flush(&self) {}
 }
 
 #[repr(i32)]
@@ -53,7 +76,7 @@ struct KinectState {
 	kind: KinectStateKind,
 }
 impl KinectState {
-	fn new(lua: gmod::lua::State) -> Result<Self, std::io::Error> {
+	fn new() -> Result<Self, std::io::Error> {
 		// We're a client if garrysmod/cache/gm_rekinect/klient_pid.dat exists
 		let mmap_name = OsString::from(format!("kinect_{}", std::process::id()));
 		let client = 'client: {
@@ -83,11 +106,7 @@ impl KinectState {
 		let mut mmap = unsafe { memmap::MmapMut::map_mut(&f)? };
 
 		if client {
-			unsafe {
-				lua.get_global(lua_string!("print"));
-				lua.push_string("gm_rekinect: started client");
-				lua.call(1, 0);
-			}
+			log::info!("client connected to mmap");
 
 			let mut client = Self {
 				mmap,
@@ -95,15 +114,11 @@ impl KinectState {
 				kind: KinectStateKind::Client { sync: None },
 			};
 
-			client.update(lua);
+			client.update();
 
 			Ok(client)
 		} else {
-			unsafe {
-				lua.get_global(lua_string!("print"));
-				lua.push_string("gm_rekinect: started server");
-				lua.call(1, 0);
-			}
+			log::info!("mmap server opened");
 
 			let inner = Kinect::new()?;
 
@@ -121,7 +136,7 @@ impl KinectState {
 		}
 	}
 
-	fn update(&mut self, lua: gmod::lua::State) {
+	fn update(&mut self) {
 		match &mut self.kind {
 			KinectStateKind::Server { inner, sync } => {
 				if self.mmap[MMAP_ACTIVE] != 1 {
@@ -134,12 +149,6 @@ impl KinectState {
 
 				*sync = sync.wrapping_add(1);
 				self.mmap[MMAP_SYNC].copy_from_slice(&u16::to_ne_bytes(*sync));
-
-				unsafe {
-					lua.get_global(lua_string!("print"));
-					lua.push_string("gm_rekinect: server update");
-					lua.call(1, 0);
-				}
 
 				if let KinectSkeleton::Tracked(pos) = update {
 					self.mmap[MMAP_SKELETON] = MMAP_KINECT_SKELETON_TRACKED;
@@ -173,16 +182,12 @@ impl KinectState {
 			KinectStateKind::Client { sync } => {
 				let shutdown = self.mmap[MMAP_SHUTDOWN];
 				if shutdown == 1 {
-					unsafe {
-						lua.get_global(lua_string!("print"));
-						lua.push_string("gm_rekinect: trying to promote to server");
-						lua.call(1, 0);
-					}
+					log::info!("trying to promote to server");
 
 					// Promote to server
 					if let Ok(inner) = Kinect::new() {
 						if core::mem::replace(&mut self.mmap[MMAP_SHUTDOWN], 0) != 1 {
-							return self.update(lua);
+							return self.update();
 						}
 
 						if self.mmap.flush_range(MMAP_SHUTDOWN, 1).is_ok() {
@@ -191,13 +196,9 @@ impl KinectState {
 								sync: sync.unwrap_or(0),
 							};
 
-							unsafe {
-								lua.get_global(lua_string!("print"));
-								lua.push_string("gm_rekinect: promoted to server");
-								lua.call(1, 0);
-							}
+							log::info!("promoted to server");
 
-							return self.update(lua);
+							return self.update();
 						}
 					}
 					return;
@@ -207,12 +208,6 @@ impl KinectState {
 				if new_sync == core::mem::replace(sync, new_sync) {
 					// No changes
 					return;
-				}
-
-				unsafe {
-					lua.get_global(lua_string!("print"));
-					lua.push_string("gm_rekinect: client update");
-					lua.call(1, 0);
 				}
 
 				match self.mmap[MMAP_SKELETON] {
@@ -269,18 +264,14 @@ enum KinectStateKind {
 }
 
 #[lua_function]
-unsafe fn poll(lua: gmod::lua::State) {
+unsafe fn poll(_lua: gmod::lua::State) {
 	if let Some(kinect) = &mut KINECT {
-		kinect.update(lua);
+		kinect.update();
 	}
 }
 
 #[lua_function]
-unsafe fn start(lua: gmod::lua::State) -> i32 {
-	lua.get_global(lua_string!("print"));
-	lua.push_string("gm_rekinect: motionsensor.Start()");
-	lua.call(1, 0);
-
+unsafe fn start(_lua: gmod::lua::State) -> i32 {
 	if let Some(kinect) = KINECT.as_mut() {
 		kinect.set_active(true);
 	}
@@ -289,11 +280,7 @@ unsafe fn start(lua: gmod::lua::State) -> i32 {
 }
 
 #[lua_function]
-unsafe fn stop(lua: gmod::lua::State) -> i32 {
-	lua.get_global(lua_string!("print"));
-	lua.push_string("gm_rekinect: motionsensor.Stop()");
-	lua.call(1, 0);
-
+unsafe fn stop(_lua: gmod::lua::State) -> i32 {
 	if let Some(kinect) = KINECT.as_mut() {
 		kinect.set_active(false);
 	}
@@ -319,7 +306,7 @@ unsafe fn get_table(lua: gmod::lua::State) -> i32 {
 	lua.create_table(kinect::SKELETON_BONE_COUNT as _, 0);
 
 	if let Some(kinect) = &mut KINECT {
-		kinect.update(lua);
+		kinect.update();
 
 		if let Some(skeleton) = &kinect.skeleton {
 			// TODO replace with gmod vector
@@ -355,7 +342,7 @@ unsafe fn get_table(lua: gmod::lua::State) -> i32 {
 #[lua_function]
 unsafe fn player_motion_sensor_pos(lua: gmod::lua::State) -> i32 {
 	let pos = if let Some(kinect) = &mut KINECT {
-		kinect.update(lua);
+		kinect.update();
 
 		if let Some(skeleton) = &mut kinect.skeleton {
 			usize::try_from(lua.to_integer(2)).ok().and_then(|idx| skeleton.get(idx))
@@ -398,10 +385,11 @@ fn gmod13_open(lua: gmod::lua::State) {
 
 	LUA_STATE.set(Some(lua));
 
+	log::set_logger(&Logger).ok();
+	log::set_max_level(log::LevelFilter::Info);
+
 	unsafe {
-		lua.get_global(lua_string!("print"));
-		lua.push_string("gm_rekinect loaded!");
-		lua.call(1, 0);
+		log::info!("gm_rekinect loaded!");
 
 		lua.get_global(lua_string!("motionsensor"));
 		if lua.is_nil(-1) {
@@ -448,7 +436,7 @@ fn gmod13_open(lua: gmod::lua::State) {
 
 		lua.pop();
 
-		match KinectState::new(lua) {
+		match KinectState::new() {
 			Ok(kinect) => {
 				KINECT = Some(kinect);
 
@@ -462,9 +450,7 @@ fn gmod13_open(lua: gmod::lua::State) {
 			}
 
 			Err(err) => {
-				lua.get_global(lua_string!("print"));
-				lua.push_string(&format!("gm_rekinect error: {err:?}\n"));
-				lua.call(1, 0);
+				log::error!("{err:?}");
 			}
 		}
 	}
@@ -506,10 +492,6 @@ fn ctor() {
 		let lua_type = lib
 			.get::<unsafe extern "C-unwind" fn(state: *mut c_void, index: c_int) -> c_int>(b"lua_type")
 			.expect("Failed to find lua_type in lua_shared");
-
-		let lua_gettop = lib
-			.get::<unsafe extern "C-unwind" fn(state: *mut c_void) -> c_int>(b"lua_gettop")
-			.expect("Failed to find lua_gettop in lua_shared");
 
 		let lua_gettop = lib
 			.get::<unsafe extern "C-unwind" fn(state: *mut c_void) -> c_int>(b"lua_gettop")

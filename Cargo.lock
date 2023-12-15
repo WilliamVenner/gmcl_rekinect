@@ -214,6 +214,7 @@ dependencies = [
  "kinect",
  "libc",
  "libloading",
+ "log",
  "memmap",
  "whereami",
  "windows",
@@ -226,6 +227,18 @@ dependencies = [
  "build_cfg",
  "cc",
  "kinect",
+ "log",
+ "windows",
+]
+
+[[package]]
+name = "gm_rekinect_winsdk_v2"
+version = "0.1.0"
+dependencies = [
+ "build_cfg",
+ "cc",
+ "kinect",
+ "log",
  "windows",
 ]
 
@@ -307,14 +320,6 @@ dependencies = [
  "env_logger",
  "libloading",
  "log",
-]
-
-[[package]]
-name = "kinect-libfreenect"
-version = "0.1.0"
-dependencies = [
- "build_cfg",
- "cc",
 ]
 
 [[package]]

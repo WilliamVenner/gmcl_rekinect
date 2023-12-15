@@ -16,11 +16,23 @@ use windows::{
 	},
 };
 
+const BONE_COUNT: usize = 20;
+
+#[inline]
+fn convert_kinect_coordinate_space_to_gmod(vector: &Vector4) -> Vector4 {
+	Vector4 {
+		x: -vector.x,
+		y: vector.z,
+		z: vector.y,
+		w: vector.w,
+	}
+}
+
 #[link(name = "kinect_winsdk_v1_cpp", kind = "static")]
 extern "C" {
-	fn WinSdkKinectV1_Create(callback: CWinSdkKinectV1Callback, userdata: *mut c_void) -> *mut c_void;
+	fn WinSdkKinectV1_Create(callback: CWinSdkKinectV1Callback, userdata: *mut c_void, res: &mut HRESULT) -> *mut c_void;
 	fn WinSdkKinectV1_Destroy(ptr: *mut c_void);
-	fn WinSdkKinectV1_Run(ptr: *mut c_void) -> HRESULT;
+	fn WinSdkKinectV1_Run(ptr: *mut c_void);
 }
 
 type CWinSdkKinectV1Callback = extern "C" fn(WinSdkKinectV1SkeletonUpdate, *mut c_void);
@@ -97,7 +109,7 @@ impl SkeletonTracked {
 	}
 
 	#[inline(always)]
-	fn raw_bones(&self) -> &[Vector4; 20] {
+	fn raw_bones(&self) -> &[Vector4; BONE_COUNT] {
 		unsafe { &(*self.bones).raw }
 	}
 }
@@ -136,7 +148,7 @@ struct Vector4 {
 
 #[repr(C)]
 union SensorBones {
-	raw: [Vector4; 20],
+	raw: [Vector4; BONE_COUNT],
 	named: NamedSensorBones,
 }
 impl std::fmt::Debug for SensorBones {
@@ -184,18 +196,19 @@ impl<U> WinSdkKinectV1<U> {
 	}
 
 	fn new_(callback: CWinSdkKinectV1Callback, userdata: *mut c_void) -> Result<Self, std::io::Error> {
-		let ptr = unsafe { WinSdkKinectV1_Create(callback, userdata) };
-		if !ptr.is_null() {
+		let mut res = HRESULT(0);
+		let ptr = unsafe { WinSdkKinectV1_Create(callback, userdata, &mut res) };
+		if !ptr.is_null() && res.is_ok() {
 			Ok(Self {
 				thread: ManuallyDrop::new({
 					let ptr = SendPtr(ptr);
 					let userdata = SendPtr(userdata);
 					std::thread::Builder::new()
-						.name("gm_rekinect_v1".to_string())
+						.name("gm_rekinect_winsdk_v1".to_string())
 						.spawn(move || unsafe {
 							let ptr = { ptr };
 							let ptr = ptr.0;
-							let _ = WinSdkKinectV1_Run(ptr);
+							WinSdkKinectV1_Run(ptr);
 							WinSdkKinectV1_Destroy(ptr);
 
 							let userdata = { userdata };
@@ -208,7 +221,10 @@ impl<U> WinSdkKinectV1<U> {
 				_userdata: PhantomData,
 			})
 		} else {
-			Err(std::io::Error::new(std::io::ErrorKind::Other, "WinSdkKinectV1_Create() failed"))
+			Err(std::io::Error::new(
+				std::io::ErrorKind::Other,
+				format!("WinSdkKinectV1_Create() failed ({res:?})"),
+			))
 		}
 	}
 }
@@ -223,7 +239,10 @@ impl<U> Drop for WinSdkKinectV1<U> {
 }
 
 #[no_mangle]
-pub extern "Rust" fn gm_rekinect_init() -> Result<Box<dyn KinectBackend>, std::io::Error> {
+pub extern "Rust" fn gm_rekinect_init(logger: &'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error> {
+	log::set_logger(logger).ok();
+	log::set_max_level(log::LevelFilter::Info);
+
 	extern "C" fn callback(event: WinSdkKinectV1SkeletonUpdate, tx: &mut std::sync::mpsc::SyncSender<WinSdkKinectV1SkeletonUpdate>) {
 		tx.send(event).ok();
 	}
@@ -246,6 +265,7 @@ pub extern "Rust" fn gm_rekinect_init() -> Result<Box<dyn KinectBackend>, std::i
 					let mut raw_bones = KinectSkeletonRawBones::default();
 
 					pos.raw_bones().iter().zip(raw_bones.iter_mut()).for_each(|(src, dst)| {
+						let src = convert_kinect_coordinate_space_to_gmod(src);
 						*dst = [src.x, src.y, src.z];
 					});
 
