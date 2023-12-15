@@ -83,7 +83,7 @@ impl Kinect {
 			let lib = libloading::Library::new(lib).map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
 
 			let init = lib
-				.get::<GmKinectDynInit>(b"gm_kinect_init")
+				.get::<GmKinectDynInit>(b"gm_rekinect_init")
 				.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
 
 			init().map(|backend| Kinect { _lib: lib, backend })

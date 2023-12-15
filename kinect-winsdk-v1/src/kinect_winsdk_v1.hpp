@@ -76,8 +76,3 @@ extern "C" HRESULT WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
 {
 	return pKinect->Run();
 }
-
-extern "C" void *WinSdkKinectV1_UserData(WinSdkKinectV1 *pKinect)
-{
-	return pKinect->m_pCallbackUserData;
-}

@@ -6,7 +6,7 @@ publish = false
 
 [[bin]]
 path = "src/main.rs"
-name = "gm_kinect_test"
+name = "gm_rekinect_test"
 
 [dependencies]
 ctrlc = "3"

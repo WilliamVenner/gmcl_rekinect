@@ -21,7 +21,6 @@ extern "C" {
 	fn WinSdkKinectV1_Create(callback: CWinSdkKinectV1Callback, userdata: *mut c_void) -> *mut c_void;
 	fn WinSdkKinectV1_Destroy(ptr: *mut c_void);
 	fn WinSdkKinectV1_Run(ptr: *mut c_void) -> HRESULT;
-	fn WinSdkKinectV1_UserData(ptr: *mut c_void) -> *mut c_void;
 }
 
 type CWinSdkKinectV1Callback = extern "C" fn(WinSdkKinectV1SkeletonUpdate, *mut c_void);
@@ -192,7 +191,7 @@ impl<U> WinSdkKinectV1<U> {
 					let ptr = SendPtr(ptr);
 					let userdata = SendPtr(userdata);
 					std::thread::Builder::new()
-						.name("gm_kinect_v1".to_string())
+						.name("gm_rekinect_v1".to_string())
 						.spawn(move || unsafe {
 							let ptr = { ptr };
 							let ptr = ptr.0;
@@ -224,7 +223,7 @@ impl<U> Drop for WinSdkKinectV1<U> {
 }
 
 #[no_mangle]
-pub extern "Rust" fn gm_kinect_init() -> Result<Box<dyn KinectBackend>, std::io::Error> {
+pub extern "Rust" fn gm_rekinect_init() -> Result<Box<dyn KinectBackend>, std::io::Error> {
 	extern "C" fn callback(event: WinSdkKinectV1SkeletonUpdate, tx: &mut std::sync::mpsc::SyncSender<WinSdkKinectV1SkeletonUpdate>) {
 		tx.send(event).ok();
 	}

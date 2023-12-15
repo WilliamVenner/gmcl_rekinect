@@ -1,4 +1,4 @@
-// cargo build --package gm_kinect && cp target/debug/gm_kinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmcl_kinect_win64.dll" && cp target/debug/gm_kinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmsv_kinect_win64.dll"
+// cargo build --all && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmcl_rekinect_win64.dll" && cp target/debug/gm_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmsv_rekinect_win64.dll"
 #![feature(array_chunks)]
 #![feature(c_unwind)]
 #![feature(option_get_or_insert_default)]
@@ -11,11 +11,27 @@ use kinect::*;
 use std::{
 	borrow::Cow,
 	cell::Cell,
-	ffi::OsString,
+	ffi::{c_char, c_int, c_void, OsString},
 	fs::OpenOptions,
 	mem::{size_of, ManuallyDrop},
 	path::Path,
 };
+
+thread_local! {
+	static LUA_STATE: Cell<Option<gmod::lua::State>> = Cell::new(None);
+}
+
+#[repr(i32)]
+enum GmodLuaInterfaceRealm {
+	Client = 0,
+	Server = 1,
+	Menu = 2,
+}
+
+#[link(name = "gm_rekinect_glua", kind = "static")]
+extern "C" {
+	fn ctor_lua_state(create_interface: *const (), realm: GmodLuaInterfaceRealm) -> *mut std::ffi::c_void;
+}
 
 static mut KINECT: Option<KinectState> = None;
 
@@ -38,10 +54,10 @@ struct KinectState {
 }
 impl KinectState {
 	fn new(lua: gmod::lua::State) -> Result<Self, std::io::Error> {
-		// We're a client if garrysmod/cache/gm_kinect/klient_pid.dat exists
+		// We're a client if garrysmod/cache/gm_rekinect/klient_pid.dat exists
 		let mmap_name = OsString::from(format!("kinect_{}", std::process::id()));
 		let client = 'client: {
-			if let Ok(dir) = std::fs::read_dir("garrysmod/cache/gm_kinect") {
+			if let Ok(dir) = std::fs::read_dir("garrysmod/cache/gm_rekinect") {
 				for entry in dir.flatten() {
 					let entry = entry.path();
 					if entry.file_name() == Some(mmap_name.as_os_str()) {
@@ -53,12 +69,12 @@ impl KinectState {
 		};
 		if !client {
 			// Clean up old mmaps
-			std::fs::remove_dir_all("garrysmod/cache/gm_kinect").ok();
+			std::fs::remove_dir_all("garrysmod/cache/gm_rekinect").ok();
 		}
 
-		std::fs::create_dir_all("garrysmod/cache/gm_kinect")?;
+		std::fs::create_dir_all("garrysmod/cache/gm_rekinect")?;
 
-		let mmap_path = Path::new("garrysmod/cache/gm_kinect").join(mmap_name);
+		let mmap_path = Path::new("garrysmod/cache/gm_rekinect").join(mmap_name);
 
 		let f = OpenOptions::new().write(true).read(true).truncate(false).create(true).open(mmap_path)?;
 
@@ -69,7 +85,7 @@ impl KinectState {
 		if client {
 			unsafe {
 				lua.get_global(lua_string!("print"));
-				lua.push_string("gm_kinect: started client");
+				lua.push_string("gm_rekinect: started client");
 				lua.call(1, 0);
 			}
 
@@ -85,7 +101,7 @@ impl KinectState {
 		} else {
 			unsafe {
 				lua.get_global(lua_string!("print"));
-				lua.push_string("gm_kinect: started server");
+				lua.push_string("gm_rekinect: started server");
 				lua.call(1, 0);
 			}
 
@@ -121,7 +137,7 @@ impl KinectState {
 
 				unsafe {
 					lua.get_global(lua_string!("print"));
-					lua.push_string("gm_kinect: server update");
+					lua.push_string("gm_rekinect: server update");
 					lua.call(1, 0);
 				}
 
@@ -159,7 +175,7 @@ impl KinectState {
 				if shutdown == 1 {
 					unsafe {
 						lua.get_global(lua_string!("print"));
-						lua.push_string("gm_kinect: trying to promote to server");
+						lua.push_string("gm_rekinect: trying to promote to server");
 						lua.call(1, 0);
 					}
 
@@ -177,7 +193,7 @@ impl KinectState {
 
 							unsafe {
 								lua.get_global(lua_string!("print"));
-								lua.push_string("gm_kinect: promoted to server");
+								lua.push_string("gm_rekinect: promoted to server");
 								lua.call(1, 0);
 							}
 
@@ -195,7 +211,7 @@ impl KinectState {
 
 				unsafe {
 					lua.get_global(lua_string!("print"));
-					lua.push_string("gm_kinect: client update");
+					lua.push_string("gm_rekinect: client update");
 					lua.call(1, 0);
 				}
 
@@ -262,7 +278,7 @@ unsafe fn poll(lua: gmod::lua::State) {
 #[lua_function]
 unsafe fn start(lua: gmod::lua::State) -> i32 {
 	lua.get_global(lua_string!("print"));
-	lua.push_string("gm_kinect: motionsensor.Start()");
+	lua.push_string("gm_rekinect: motionsensor.Start()");
 	lua.call(1, 0);
 
 	if let Some(kinect) = KINECT.as_mut() {
@@ -275,7 +291,7 @@ unsafe fn start(lua: gmod::lua::State) -> i32 {
 #[lua_function]
 unsafe fn stop(lua: gmod::lua::State) -> i32 {
 	lua.get_global(lua_string!("print"));
-	lua.push_string("gm_kinect: motionsensor.Stop()");
+	lua.push_string("gm_rekinect: motionsensor.Stop()");
 	lua.call(1, 0);
 
 	if let Some(kinect) = KINECT.as_mut() {
@@ -378,30 +394,13 @@ unsafe fn get_colour_material(lua: gmod::lua::State) -> i32 {
 
 #[gmod13_open]
 fn gmod13_open(lua: gmod::lua::State) {
-	thread_local! {
-		static LUA_STATE: Cell<Option<gmod::lua::State>> = Cell::new(None);
-	}
+	set_panic_handler();
 
 	LUA_STATE.set(Some(lua));
 
-	std::panic::set_hook(Box::new(move |panic| {
-		let path = if let Some(lua) = LUA_STATE.get() {
-			unsafe {
-				lua.get_global(lua_string!("ErrorNoHalt"));
-				lua.push_string(&format!("Kinect panic: {:#?}\n", panic));
-				lua.call(1, 0);
-			}
-			Cow::Borrowed("gm_kinect_panic.txt")
-		} else {
-			Cow::Owned(format!("gm_kinect_panic_{}.txt", std::thread::current().id().as_u64()))
-		};
-
-		std::fs::write(path.as_ref(), format!("{:#?}", panic)).ok();
-	}));
-
 	unsafe {
 		lua.get_global(lua_string!("print"));
-		lua.push_string("gm_kinect loaded!");
+		lua.push_string("gm_rekinect loaded!");
 		lua.call(1, 0);
 
 		lua.get_global(lua_string!("motionsensor"));
@@ -456,7 +455,7 @@ fn gmod13_open(lua: gmod::lua::State) {
 				lua.get_global(lua_string!("hook"));
 				lua.get_field(-1, lua_string!("Add"));
 				lua.push_string("Think");
-				lua.push_string("gm_kinect");
+				lua.push_string("gm_rekinect");
 				lua.push_function(poll);
 				lua.call(3, 0);
 				lua.pop();
@@ -464,7 +463,7 @@ fn gmod13_open(lua: gmod::lua::State) {
 
 			Err(err) => {
 				lua.get_global(lua_string!("print"));
-				lua.push_string(&format!("gm_kinect error: {err:?}\n"));
+				lua.push_string(&format!("gm_rekinect error: {err:?}\n"));
 				lua.call(1, 0);
 			}
 		}
@@ -474,4 +473,102 @@ fn gmod13_open(lua: gmod::lua::State) {
 #[gmod13_close]
 fn gmod13_close(_lua: gmod::lua::State) {
 	unsafe { KINECT = None };
+}
+
+// Support for DLL injecting
+#[ctor::ctor]
+fn ctor() {
+	set_panic_handler();
+
+	unsafe {
+		let lib = {
+			#[cfg(windows)]
+			{
+				libloading::os::windows::Library::open_already_loaded("lua_shared")
+			}
+			#[cfg(unix)]
+			{
+				libloading::os::unix::Library::open(Some("lua_shared_srv"), libc::RTLD_NOLOAD)
+					.or_else(|_| libloading::os::unix::Library::open(Some("lua_shared"), libc::RTLD_NOLOAD))
+			}
+		};
+
+		let lib = lib.expect("Failed to find lua_shared");
+
+		let gmod_load_binary_module = lib
+			.get::<extern "C" fn(*mut c_void, *const c_char) -> c_int>(b"GMOD_LoadBinaryModule")
+			.expect("Failed to find GMOD_LoadBinaryModule in lua_shared");
+
+		let create_interface = lib
+			.get::<*const ()>(b"CreateInterface")
+			.expect("Failed to find CreateInterface in lua_shared");
+
+		let lua_type = lib
+			.get::<unsafe extern "C-unwind" fn(state: *mut c_void, index: c_int) -> c_int>(b"lua_type")
+			.expect("Failed to find lua_type in lua_shared");
+
+		let lua_gettop = lib
+			.get::<unsafe extern "C-unwind" fn(state: *mut c_void) -> c_int>(b"lua_gettop")
+			.expect("Failed to find lua_gettop in lua_shared");
+
+		let lua_gettop = lib
+			.get::<unsafe extern "C-unwind" fn(state: *mut c_void) -> c_int>(b"lua_gettop")
+			.expect("Failed to find lua_gettop in lua_shared");
+
+		let suffix = match () {
+			_ if cfg!(all(target_pointer_width = "64", windows)) => "win64",
+			_ if cfg!(all(target_pointer_width = "32", windows)) => "win32",
+			_ if cfg!(all(target_pointer_width = "64", target_os = "linux")) => "linux64",
+			_ if cfg!(all(target_pointer_width = "32", target_os = "linux")) => "linux",
+			_ if cfg!(target_os = "macos") => "osx",
+			_ => panic!("Unsupported platform"),
+		};
+
+		let cl = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Client);
+		let sv = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Server);
+		let mn = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Menu);
+
+		// First check if we're already being loaded by GMOD_LoadBinaryModule
+		for lua in [cl, sv, mn] {
+			if lua.is_null() {
+				// This Lua state isn't active, ignore it
+				continue;
+			}
+
+			if lua_type(lua, 1) == gmod::lua::LUA_TSTRING {
+				// We're already being loaded by GMOD_LoadBinaryModule, bail
+				// This detection really sucks, but it works
+				return;
+			}
+		}
+
+		for (lua, prefix) in [(cl, "gmcl"), (sv, "gmsv"), (mn, "gmsv")] {
+			if lua.is_null() {
+				continue;
+			}
+
+			let path = OsString::from(format!("garrysmod/lua/bin/{prefix}_rekinect_{suffix}.dll\0"));
+
+			// FIXME
+		}
+
+		std::mem::forget(lib);
+	}
+}
+
+fn set_panic_handler() {
+	std::panic::set_hook(Box::new(move |panic| {
+		let path = if let Some(lua) = LUA_STATE.get() {
+			unsafe {
+				lua.get_global(lua_string!("ErrorNoHalt"));
+				lua.push_string(&format!("Kinect panic: {:#?}\n", panic));
+				lua.call(1, 0);
+			}
+			Cow::Borrowed("gm_rekinect_panic.txt")
+		} else {
+			Cow::Owned(format!("gm_rekinect_panic_{}.txt", std::thread::current().id().as_u64()))
+		};
+
+		std::fs::write(path.as_ref(), format!("{:#?}", panic)).ok();
+	}));
 }
