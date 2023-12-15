@@ -10,3 +10,6 @@ path = "src/main.rs"
 
 [target.'cfg(windows)'.dependencies]
 kinect-v1 = { path = "../kinect-v1" }
+
+[dependencies]
+ctrlc = "3"

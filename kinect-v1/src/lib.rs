@@ -221,7 +221,7 @@ impl<U> Drop for KinectV1<U> {
         let thread = unsafe { ManuallyDrop::take(&mut self.thread) };
         unsafe {
             PostThreadMessageW(
-                dbg!(thread.as_raw_handle() as usize as _),
+                thread.as_raw_handle() as usize as _,
                 WM_QUIT,
                 WPARAM(0),
                 LPARAM(0),
