@@ -5,7 +5,11 @@ edition = "2021"
 publish = false
 
 [dependencies]
-windows = "0.52"
+windows = { version = "0.52", features = [
+	"Win32_Foundation",
+	"Win32_UI",
+	"Win32_UI_WindowsAndMessaging",
+] }
 
 [build-dependencies]
 cc = "1"

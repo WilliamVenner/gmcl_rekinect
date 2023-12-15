@@ -1,16 +1,30 @@
-use std::{ffi::c_void, marker::PhantomData, mem::MaybeUninit};
-use windows::core::HRESULT;
+use std::{
+    ffi::c_void,
+    marker::PhantomData,
+    mem::{ManuallyDrop, MaybeUninit},
+    os::windows::io::AsRawHandle,
+};
+use windows::{
+    core::HRESULT,
+    Win32::{
+        Foundation::{LPARAM, WPARAM},
+        UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT},
+    },
+};
 
 #[link(name = "gm_kinect_v1", kind = "static")]
 extern "C" {
     fn KinectV1_Create(callback: CKinectV1Callback, userdata: *mut c_void) -> *mut c_void;
     fn KinectV1_Destroy(ptr: *mut c_void);
     fn KinectV1_Run(ptr: *mut c_void) -> HRESULT;
-    fn KinectV1_UserData(ptr: *mut c_void) -> *mut c_void;
 }
 
 type CKinectV1Callback = extern "C" fn(KinectV1SkeletonUpdate, *mut c_void);
 pub type KinectV1Callback<U> = extern "C" fn(KinectV1SkeletonUpdate, &mut U);
+
+struct SendPtr<T>(*mut T);
+unsafe impl<T> Send for SendPtr<T> {}
+unsafe impl<T> Sync for SendPtr<T> {}
 
 #[repr(C)]
 pub struct KinectV1SkeletonUpdate {
@@ -157,9 +171,8 @@ pub struct NamedSensorBones {
     pub foot_right: Vector4,
 }
 
-#[repr(transparent)]
 pub struct KinectV1<U> {
-    ptr: *mut c_void,
+    thread: ManuallyDrop<std::thread::JoinHandle<()>>,
     _userdata: PhantomData<U>,
 }
 impl<U> KinectV1<U> {
@@ -175,7 +188,24 @@ impl<U> KinectV1<U> {
         let ptr = unsafe { KinectV1_Create(callback, userdata) };
         if !ptr.is_null() {
             Ok(Self {
-                ptr,
+                thread: ManuallyDrop::new({
+                    let ptr = SendPtr(ptr);
+                    let userdata = SendPtr(userdata);
+                    std::thread::Builder::new()
+                        .name("gm_kinect_v1".to_string())
+                        .spawn(move || unsafe {
+                            let ptr = { ptr };
+                            let ptr = ptr.0;
+                            let _ = KinectV1_Run(ptr);
+                            KinectV1_Destroy(ptr);
+
+                            let userdata = { userdata };
+                            let userdata = userdata.0;
+                            drop(Box::from_raw(userdata as *mut U));
+                        })
+                        .unwrap()
+                }),
+
                 _userdata: PhantomData,
             })
         } else {
@@ -185,24 +215,18 @@ impl<U> KinectV1<U> {
             ))
         }
     }
-
-    pub fn run(self) -> Result<(), std::io::Error> {
-        unsafe { KinectV1_Run(self.ptr) }.ok()?;
-        Ok(())
-    }
 }
 impl<U> Drop for KinectV1<U> {
     fn drop(&mut self) {
-        if !self.ptr.is_null() {
-            unsafe {
-                let userdata = KinectV1_UserData(self.ptr) as *mut U;
-                if !userdata.is_null() {
-                    drop(Box::from_raw(userdata));
-                }
-
-                KinectV1_Destroy(self.ptr);
-            }
+        let thread = unsafe { ManuallyDrop::take(&mut self.thread) };
+        unsafe {
+            PostThreadMessageW(
+                dbg!(thread.as_raw_handle() as usize as _),
+                WM_QUIT,
+                WPARAM(0),
+                LPARAM(0),
+            )
+            .ok();
         }
     }
 }
-unsafe impl<U> Send for KinectV1<U> {}

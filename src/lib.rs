@@ -21,6 +21,7 @@ static mut KINECT: Option<KinectState> = None;
 
 const MMAP_FILE_SIZE: u64 = (size_of::<u8>()
     + size_of::<u8>()
+    + size_of::<u8>()
     + size_of::<u16>()
     + (size_of::<[f32; 3]>() * kinect::SKELETON_BONE_COUNT)) as u64;
 
@@ -28,9 +29,10 @@ const MMAP_KINECT_SKELETON_NONE: u8 = 0;
 const MMAP_KINECT_SKELETON_TRACKED: u8 = 1;
 
 const MMAP_SHUTDOWN: usize = 0;
-const MMAP_SYNC: std::ops::Range<usize> = 1..3;
-const MMAP_SKELETON: usize = 3;
-const MMAP_SKELETON_BONES: std::ops::RangeFrom<usize> = 4..;
+const MMAP_ACTIVE: usize = 1;
+const MMAP_SYNC: std::ops::Range<usize> = 2..4;
+const MMAP_SKELETON: usize = 4;
+const MMAP_SKELETON_BONES: std::ops::Range<usize> = 5..MMAP_FILE_SIZE as usize;
 
 struct KinectState {
     mmap: memmap::MmapMut,
@@ -97,8 +99,8 @@ impl KinectState {
 
             let inner = Kinect::new()?;
 
-            mmap[0..4].copy_from_slice(&[0, 0, 0, 0]);
-            mmap.flush_range(0, 4).ok();
+            mmap.fill(0);
+            mmap.flush().ok();
 
             Ok(Self {
                 mmap,
@@ -114,6 +116,10 @@ impl KinectState {
     fn update(&mut self, lua: gmod::lua::State) {
         match &mut self.kind {
             KinectStateKind::Server { inner, sync } => {
+                if self.mmap[MMAP_ACTIVE] != 1 {
+                    return;
+                }
+
                 let mut last_update = None;
                 while let Some(update) = inner.poll() {
                     last_update = Some(update);
@@ -152,10 +158,17 @@ impl KinectState {
                         *skeleton = [vec.x, vec.y, vec.z];
                     }
 
-                    self.mmap.flush_range(1, (MMAP_FILE_SIZE - 1) as _).ok();
+                    self.mmap
+                        .flush_range(
+                            MMAP_SYNC.start,
+                            (MMAP_SYNC.start..MMAP_SKELETON_BONES.end).len(),
+                        )
+                        .ok();
                 } else {
                     self.mmap[MMAP_SKELETON] = MMAP_KINECT_SKELETON_NONE;
-                    self.mmap.flush_range(1, 3).ok();
+                    self.mmap
+                        .flush_range(MMAP_SYNC.start, (MMAP_SYNC.start..MMAP_SKELETON).len())
+                        .ok();
 
                     self.skeleton = None;
                 }
@@ -176,7 +189,7 @@ impl KinectState {
                             return self.update(lua);
                         }
 
-                        if self.mmap.flush_range(0, 1).is_ok() {
+                        if self.mmap.flush_range(MMAP_SHUTDOWN, 1).is_ok() {
                             self.kind = KinectStateKind::Server {
                                 inner: ManuallyDrop::new(inner),
                                 sync: sync.unwrap_or(0),
@@ -230,6 +243,15 @@ impl KinectState {
             }
         }
     }
+
+    fn active(&self) -> bool {
+        self.mmap[MMAP_ACTIVE] == 1
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.mmap[MMAP_ACTIVE] = active as u8;
+        self.mmap.flush_range(MMAP_ACTIVE, 1).ok();
+    }
 }
 impl Drop for KinectState {
     fn drop(&mut self) {
@@ -239,7 +261,7 @@ impl Drop for KinectState {
 
             // Mark shutdown byte
             self.mmap[MMAP_SHUTDOWN] = 1;
-            self.mmap.flush_range(0, 1).ok();
+            self.mmap.flush_range(MMAP_SHUTDOWN, 1).ok();
         }
     }
 }
@@ -256,9 +278,9 @@ enum KinectStateKind {
 }
 
 #[lua_function]
-unsafe fn poll(_lua: gmod::lua::State) {
+unsafe fn poll(lua: gmod::lua::State) {
     if let Some(kinect) = &mut KINECT {
-        kinect.update(_lua);
+        kinect.update(lua);
     }
 }
 
@@ -268,32 +290,9 @@ unsafe fn start(lua: gmod::lua::State) -> i32 {
     lua.push_string("gm_kinect: motionsensor.Start()");
     lua.call(1, 0);
 
-    lua.push_boolean(if KINECT.is_none() {
-        match KinectState::new(lua) {
-            Ok(kinect) => {
-                KINECT = Some(kinect);
-
-                lua.get_global(lua_string!("hook"));
-                lua.get_field(-1, lua_string!("Add"));
-                lua.push_string("Think");
-                lua.push_string("gm_kinect");
-                lua.push_function(poll);
-                lua.call(3, 0);
-                lua.pop();
-
-                true
-            }
-            Err(err) => {
-                lua.get_global(lua_string!("ErrorNoHalt"));
-                lua.push_string(&format!("Kinect error: {err:?}\n"));
-                lua.call(1, 0);
-
-                false
-            }
-        }
-    } else {
-        false
-    });
+    if let Some(kinect) = KINECT.as_mut() {
+        kinect.set_active(true);
+    }
 
     1
 }
@@ -304,28 +303,28 @@ unsafe fn stop(lua: gmod::lua::State) -> i32 {
     lua.push_string("gm_kinect: motionsensor.Stop()");
     lua.call(1, 0);
 
-    lua.get_global(lua_string!("hook"));
-    lua.get_field(-1, lua_string!("Remove"));
-    lua.push_string("Think");
-    lua.push_string("gm_kinect");
-    lua.call(2, 0);
-    lua.pop();
-
-    KINECT = None;
+    if let Some(kinect) = KINECT.as_mut() {
+        kinect.set_active(false);
+    }
 
     0
 }
 
 #[lua_function]
 unsafe fn is_active(lua: gmod::lua::State) -> i32 {
-    lua.push_boolean(KINECT.is_some());
+    lua.push_boolean(
+        KINECT
+            .as_ref()
+            .map(|kinect| kinect.active())
+            .unwrap_or(false),
+    );
+
     1
 }
 
 #[lua_function]
 unsafe fn is_available(lua: gmod::lua::State) -> i32 {
-    // FIXME
-    lua.push_boolean(true);
+    lua.push_boolean(KINECT.is_some());
     1
 }
 
@@ -484,6 +483,26 @@ fn gmod13_open(lua: gmod::lua::State) {
         }
 
         lua.pop();
+
+        match KinectState::new(lua) {
+            Ok(kinect) => {
+                KINECT = Some(kinect);
+
+                lua.get_global(lua_string!("hook"));
+                lua.get_field(-1, lua_string!("Add"));
+                lua.push_string("Think");
+                lua.push_string("gm_kinect");
+                lua.push_function(poll);
+                lua.call(3, 0);
+                lua.pop();
+            }
+
+            Err(err) => {
+                lua.get_global(lua_string!("print"));
+                lua.push_string(&format!("gm_kinect error: {err:?}\n"));
+                lua.call(1, 0);
+            }
+        }
     }
 }
 

@@ -29,7 +29,7 @@ extern "C"
 class KinectV1
 {
 public:
-	KinectV1(KinectV1Callback callback, void* userdata);
+	KinectV1(KinectV1Callback callback, void *userdata);
 	~KinectV1();
 
 	HRESULT Run();
@@ -62,8 +62,10 @@ extern "C" KinectV1 *KinectV1_Create(KinectV1Callback callback, void *userdata)
 	return new KinectV1(callback, userdata);
 }
 
-extern "C" void KinectV1_Destroy(KinectV1 *pKinect)
+extern "C" void KinectV1_Destroy(KinectV1 *pKinect, DWORD threadId)
 {
+	PostThreadMessageW(threadId, WM_QUIT, 0, 0);
+
 	if (pKinect != NULL)
 	{
 		delete pKinect;
