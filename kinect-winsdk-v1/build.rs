@@ -7,10 +7,14 @@ extern crate build_cfg;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
+    if !build_cfg!(windows) {
+        return;
+    }
+
     println!("cargo:rerun-if-env-changed=KINECTSDK10_DIR");
 
-    println!("cargo:rerun-if-changed=src/gm_kinect_v1.cpp");
-    println!("cargo:rerun-if-changed=src/gm_kinect_v1.hpp");
+    println!("cargo:rerun-if-changed=src/kinect_winsdk_v1.cpp");
+    println!("cargo:rerun-if-changed=src/kinect_winsdk_v1.hpp");
 
     let kinect_v1_sdk_path =
         PathBuf::from(std::env::var_os("KINECTSDK10_DIR").expect("KINECTSDK10_DIR not set"));
@@ -32,7 +36,7 @@ fn main() {
         .cpp(true)
         .cargo_metadata(true)
         .static_flag(true)
-        .file("src/gm_kinect_v1.cpp")
+        .file("src/kinect_winsdk_v1.cpp")
         .include(kinect_v1_sdk_path.join("inc"))
-        .compile("gm_kinect_v1");
+        .compile("kinect_winsdk_v1_cpp");
 }

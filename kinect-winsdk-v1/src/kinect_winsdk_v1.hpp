@@ -4,33 +4,33 @@
 
 extern "C"
 {
-	typedef struct KinectV1SkeletonWithBones
+	typedef struct WinSdkKinectV1SkeletonWithBones
 	{
 		Vector4 *pos;
 		Vector4 *bones;
 	};
 
-	typedef union KinectV1Skeleton
+	typedef union WinSdkKinectV1Skeleton
 	{
 		Vector4 *positionOnly;
-		KinectV1SkeletonWithBones tracked;
+		WinSdkKinectV1SkeletonWithBones tracked;
 	};
 
-	typedef struct KinectV1SkeletonUpdate
+	typedef struct WinSdkKinectV1SkeletonUpdate
 	{
 		uintptr_t skeletonIndex;
 		NUI_SKELETON_TRACKING_STATE state;
-		KinectV1Skeleton skeleton;
+		WinSdkKinectV1Skeleton skeleton;
 	};
 
-	typedef void (*KinectV1Callback)(KinectV1SkeletonUpdate, void *);
+	typedef void (*WinSdkKinectV1Callback)(WinSdkKinectV1SkeletonUpdate, void *);
 }
 
-class KinectV1
+class WinSdkKinectV1
 {
 public:
-	KinectV1(KinectV1Callback callback, void *userdata);
-	~KinectV1();
+	WinSdkKinectV1(WinSdkKinectV1Callback callback, void *userdata);
+	~WinSdkKinectV1();
 
 	HRESULT Run();
 
@@ -45,7 +45,7 @@ private:
 	/// Handle new skeleton data
 	void ProcessSkeleton();
 
-	KinectV1Callback m_Callback;
+	WinSdkKinectV1Callback m_Callback;
 
 	bool m_bSeatedMode;
 
@@ -57,12 +57,12 @@ private:
 	NUI_SKELETON_TRACKING_STATE m_SkeletonTrackingStates[NUI_SKELETON_COUNT];
 };
 
-extern "C" KinectV1 *KinectV1_Create(KinectV1Callback callback, void *userdata)
+extern "C" WinSdkKinectV1 *WinSdkKinectV1_Create(WinSdkKinectV1Callback callback, void *userdata)
 {
-	return new KinectV1(callback, userdata);
+	return new WinSdkKinectV1(callback, userdata);
 }
 
-extern "C" void KinectV1_Destroy(KinectV1 *pKinect, DWORD threadId)
+extern "C" void WinSdkKinectV1_Destroy(WinSdkKinectV1 *pKinect, DWORD threadId)
 {
 	PostThreadMessageW(threadId, WM_QUIT, 0, 0);
 
@@ -72,12 +72,12 @@ extern "C" void KinectV1_Destroy(KinectV1 *pKinect, DWORD threadId)
 	}
 }
 
-extern "C" HRESULT KinectV1_Run(KinectV1 *pKinect)
+extern "C" HRESULT WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
 {
 	return pKinect->Run();
 }
 
-extern "C" void *KinectV1_UserData(KinectV1 *pKinect)
+extern "C" void *WinSdkKinectV1_UserData(WinSdkKinectV1 *pKinect)
 {
 	return pKinect->m_pCallbackUserData;
 }

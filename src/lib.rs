@@ -7,7 +7,7 @@
 #[macro_use]
 extern crate gmod;
 
-use kinect::Kinect;
+use kinect::*;
 use std::{
     borrow::Cow,
     cell::Cell,
@@ -120,11 +120,7 @@ impl KinectState {
                     return;
                 }
 
-                let mut last_update = None;
-                while let Some(update) = inner.poll() {
-                    last_update = Some(update);
-                }
-                let Some(last_update) = last_update else {
+                let Some(update) = inner.poll() else {
                     return;
                 };
 
@@ -137,7 +133,7 @@ impl KinectState {
                     lua.call(1, 0);
                 }
 
-                if let Some(kinect::Skeleton::Tracked(pos)) = last_update.pos() {
+                if let KinectSkeleton::Tracked(pos) = update {
                     self.mmap[MMAP_SKELETON] = MMAP_KINECT_SKELETON_TRACKED;
 
                     let skeleton = self.skeleton.get_or_insert_default();
@@ -151,11 +147,11 @@ impl KinectState {
                         )
                         .zip(skeleton.iter_mut())
                     {
-                        mmap[0..4].copy_from_slice(&f32::to_ne_bytes(vec.x));
-                        mmap[4..8].copy_from_slice(&f32::to_ne_bytes(vec.y));
-                        mmap[8..12].copy_from_slice(&f32::to_ne_bytes(vec.z));
+                        mmap[0..4].copy_from_slice(&f32::to_ne_bytes(vec[0]));
+                        mmap[4..8].copy_from_slice(&f32::to_ne_bytes(vec[1]));
+                        mmap[8..12].copy_from_slice(&f32::to_ne_bytes(vec[2]));
 
-                        *skeleton = [vec.x, vec.y, vec.z];
+                        *skeleton = *vec;
                     }
 
                     self.mmap

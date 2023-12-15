@@ -5,11 +5,11 @@ edition = "2021"
 publish = false
 
 [[bin]]
-name = "gm_kinect32"
 path = "src/main.rs"
-
-[target.'cfg(windows)'.dependencies]
-kinect-v1 = { path = "../kinect-v1" }
+name = "gm_kinect_test"
 
 [dependencies]
 ctrlc = "3"
+libloading = "0.8"
+log = "0.4"
+env_logger = "0.10"

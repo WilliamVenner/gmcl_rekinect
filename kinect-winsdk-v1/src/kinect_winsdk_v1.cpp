@@ -1,4 +1,4 @@
-#include "gm_kinect_v1.hpp"
+#include "kinect_winsdk_v1.hpp"
 
 template <class Interface>
 inline void SafeRelease(Interface *&pInterfaceToRelease)
@@ -10,8 +10,8 @@ inline void SafeRelease(Interface *&pInterfaceToRelease)
 	}
 }
 
-KinectV1::KinectV1(
-	KinectV1Callback callback, void *userdata) : m_hNextSkeletonEvent(INVALID_HANDLE_VALUE),
+WinSdkKinectV1::WinSdkKinectV1(
+	WinSdkKinectV1Callback callback, void *userdata) : m_hNextSkeletonEvent(INVALID_HANDLE_VALUE),
 												 m_pSkeletonStreamHandle(INVALID_HANDLE_VALUE),
 												 m_bSeatedMode(false),
 												 m_pNuiSensor(NULL),
@@ -24,7 +24,7 @@ KinectV1::KinectV1(
 	}
 }
 
-KinectV1::~KinectV1()
+WinSdkKinectV1::~WinSdkKinectV1()
 {
 	if (m_pNuiSensor)
 	{
@@ -39,7 +39,7 @@ KinectV1::~KinectV1()
 	SafeRelease(m_pNuiSensor);
 }
 
-HRESULT KinectV1::Run()
+HRESULT WinSdkKinectV1::Run()
 {
 	HRESULT hr = CreateFirstConnected();
 	if (FAILED(hr))
@@ -76,7 +76,7 @@ HRESULT KinectV1::Run()
 	return S_OK;
 }
 
-void KinectV1::Update()
+void WinSdkKinectV1::Update()
 {
 	if (NULL == m_pNuiSensor)
 	{
@@ -91,7 +91,7 @@ void KinectV1::Update()
 }
 
 /// Create the first connected Kinect found
-HRESULT KinectV1::CreateFirstConnected()
+HRESULT WinSdkKinectV1::CreateFirstConnected()
 {
 	INuiSensor *pNuiSensor;
 
@@ -147,7 +147,7 @@ HRESULT KinectV1::CreateFirstConnected()
 }
 
 /// Handle new skeleton data
-void KinectV1::ProcessSkeleton()
+void WinSdkKinectV1::ProcessSkeleton()
 {
 	NUI_SKELETON_FRAME skeletonFrame = {0};
 
@@ -179,13 +179,13 @@ void KinectV1::ProcessSkeleton()
 		{
 			if (NUI_SKELETON_TRACKED == trackingState)
 			{
-				KinectV1Skeleton skeleton;
+				WinSdkKinectV1Skeleton skeleton;
 				skeleton.tracked = {&skeletonFrame.SkeletonData[i].Position, skeletonFrame.SkeletonData[i].SkeletonPositions};
 				m_Callback({(uintptr_t)i, NUI_SKELETON_TRACKED, skeleton}, m_pCallbackUserData);
 			}
 			else if (NUI_SKELETON_POSITION_ONLY == trackingState)
 			{
-				KinectV1Skeleton skeleton;
+				WinSdkKinectV1Skeleton skeleton;
 				skeleton.positionOnly = &skeletonFrame.SkeletonData[i].Position;
 				m_Callback({(uintptr_t)i, NUI_SKELETON_POSITION_ONLY, skeleton}, m_pCallbackUserData);
 			}
