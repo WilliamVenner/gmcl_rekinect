@@ -1,16 +1,24 @@
 #include "glua.hpp"
 #include <stdio.h>
+#include <functional>
 
-extern "C" void *ctor_lua_state(CreateInterfaceFn createInterface, uint32_t realm)
+extern "C" ILuaShared *get_lua_shared(CreateInterfaceFn createInterface)
 {
-	ILuaShared *iface = (ILuaShared *)createInterface("LUASHARED003", NULL);
-	CLuaInterface *cface = iface->GetLuaInterface(realm);
-	if (cface)
-	{
-		return cface->lua;
-	}
-	else
-	{
-		return NULL;
-	}
+	return (ILuaShared *)createInterface("LUASHARED003", NULL);
+}
+
+extern "C" void *get_lua_state(CLuaInterface *lua)
+{
+	return lua->lua;
+}
+
+extern "C" CLuaInterface *open_lua_state(ILuaShared *lua, unsigned char type)
+{
+	return lua->GetLuaInterface(type);
+}
+
+// TODO lookup these in rust instead
+extern "C" void *lookup_vtable(void *virtualClass, const uintptr_t index)
+{
+	return (*(void ***)virtualClass)[index];
 }

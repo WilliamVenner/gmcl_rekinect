@@ -9,21 +9,17 @@ extern crate gmod;
 
 use kinect::*;
 use std::{
-	borrow::Cow,
-	cell::Cell,
-	ffi::{c_char, c_int, c_void, OsString},
+	collections::HashMap,
+	ffi::{c_void, OsString},
 	fs::OpenOptions,
 	mem::{size_of, ManuallyDrop},
 	path::Path,
 };
 
-thread_local! {
-	static LUA_STATE: Cell<Option<gmod::lua::State>> = Cell::new(None);
-}
-
 struct Logger;
 impl log::Log for Logger {
 	fn log(&self, record: &log::Record) {
+		/*
 		let Some(lua) = LUA_STATE.get() else { return };
 		unsafe {
 			lua.get_global(lua_string!("print"));
@@ -33,6 +29,21 @@ impl log::Log for Logger {
 				format!("gm_rekinect: {}", record.args())
 			});
 			lua.call(1, 0);
+		}
+		*/
+
+		if let Ok(mut f) = std::fs::OpenOptions::new()
+			.append(true)
+			.create(true)
+			.truncate(false)
+			.open("gm_rekinect.log")
+		{
+			use std::io::Write;
+			let _ = if record.level() != log::Level::Info {
+				writeln!(f, "gm_rekinect: [{}] {}", record.level(), record.args())
+			} else {
+				writeln!(f, "gm_rekinect: {}", record.args())
+			};
 		}
 	}
 
@@ -44,16 +55,25 @@ impl log::Log for Logger {
 	fn flush(&self) {}
 }
 
-#[repr(i32)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
 enum GmodLuaInterfaceRealm {
 	Client = 0,
 	Server = 1,
 	Menu = 2,
 }
 
+type CreateLuaInterfaceFn = extern "cdecl" fn(this: *mut c_void, GmodLuaInterfaceRealm, bool) -> *mut c_void;
+type LuaInterfaceInitFn = extern "cdecl" fn(this: *mut c_void, *mut c_void, bool);
+type LuaInterfaceShutdownFn = extern "cdecl" fn(this: *mut c_void);
+
 #[link(name = "gm_rekinect_glua", kind = "static")]
 extern "C" {
-	fn ctor_lua_state(create_interface: *const (), realm: GmodLuaInterfaceRealm) -> *mut std::ffi::c_void;
+	fn get_lua_shared(create_interface_fn: *const ()) -> *mut c_void;
+	fn open_lua_state(i_lua_shared: *mut c_void, realm: GmodLuaInterfaceRealm) -> *mut c_void;
+	fn get_lua_state(c_lua_interface: *mut c_void) -> *mut c_void;
+	fn lua_state_realm(i_lua_interface: *mut c_void) -> GmodLuaInterfaceRealm;
+	fn lookup_vtable(vtable: *mut c_void, index: usize) -> *mut c_void;
 }
 
 static mut KINECT: Option<KinectState> = None;
@@ -259,7 +279,6 @@ impl Drop for KinectState {
 
 enum KinectStateKind {
 	Server { inner: ManuallyDrop<Kinect>, sync: u16 },
-
 	Client { sync: Option<u16> },
 }
 
@@ -383,25 +402,23 @@ unsafe fn get_colour_material(lua: gmod::lua::State) -> i32 {
 fn gmod13_open(lua: gmod::lua::State) {
 	set_panic_handler();
 
-	LUA_STATE.set(Some(lua));
-
-	log::set_logger(&Logger).ok();
-	log::set_max_level(log::LevelFilter::Info);
-
 	unsafe {
 		log::info!("gm_rekinect loaded!");
 
 		lua.get_global(lua_string!("motionsensor"));
+		log::info!("1");
 		if lua.is_nil(-1) {
 			lua.create_table(0, 0);
 			lua.set_global(lua_string!("motionsensor"));
 			lua.get_global(lua_string!("motionsensor"));
 		}
 
+		log::info!("2");
 		lua.push_string("Start");
 		lua.push_function(start);
 		lua.set_table(-3);
 
+		log::info!("3");
 		lua.push_string("Stop");
 		lua.push_function(stop);
 		lua.set_table(-3);
@@ -418,24 +435,30 @@ fn gmod13_open(lua: gmod::lua::State) {
 		lua.push_function(get_table);
 		lua.set_table(-3);
 
+		log::info!("4");
 		lua.push_string("GetColourMaterial");
 		lua.push_function(get_colour_material);
 		lua.set_table(-3);
 
 		lua.pop();
+		log::info!("5");
 
+		lua.get_global(lua_string!("MENU_DLL"));
 		lua.get_global(lua_string!("FindMetaTable"));
 		lua.push_string("Player");
 		lua.call(1, 1);
 
 		if !lua.is_nil(-1) {
+			log::info!("6");
 			lua.push_string("MotionSensorPos");
 			lua.push_function(player_motion_sensor_pos);
 			lua.set_table(-3);
 		}
 
+		log::info!("7");
 		lua.pop();
 
+		log::info!("ayyyyyyyyyy");
 		match KinectState::new() {
 			Ok(kinect) => {
 				KINECT = Some(kinect);
@@ -453,18 +476,28 @@ fn gmod13_open(lua: gmod::lua::State) {
 				log::error!("{err:?}");
 			}
 		}
+		log::info!("bro!!!");
 	}
 }
 
 #[gmod13_close]
 fn gmod13_close(_lua: gmod::lua::State) {
+	// FIXME refcount this
 	unsafe { KINECT = None };
 }
+
+static mut CREATE_LUA_INTERFACE: Option<gmod::detour::RawDetour> = None;
+static mut LUA_INTERFACE_INIT: Option<gmod::detour::RawDetour> = None;
 
 // Support for DLL injecting
 #[ctor::ctor]
 fn ctor() {
 	set_panic_handler();
+
+	std::fs::remove_file("gm_rekinect.log").ok();
+
+	log::set_logger(&Logger).ok();
+	log::set_max_level(log::LevelFilter::Info);
 
 	unsafe {
 		let lib = {
@@ -481,76 +514,101 @@ fn ctor() {
 
 		let lib = lib.expect("Failed to find lua_shared");
 
-		let gmod_load_binary_module = lib
-			.get::<extern "C" fn(*mut c_void, *const c_char) -> c_int>(b"GMOD_LoadBinaryModule")
-			.expect("Failed to find GMOD_LoadBinaryModule in lua_shared");
+		let i_lua_shared = get_lua_shared(
+			*lib.get::<*const ()>(b"CreateInterface")
+				.expect("Failed to find CreateInterface in lua_shared"),
+		);
+		if i_lua_shared.is_null() {
+			panic!("Failed to get ILuaShared");
+		}
 
-		let create_interface = lib
-			.get::<*const ()>(b"CreateInterface")
-			.expect("Failed to find CreateInterface in lua_shared");
+		{
+			let cl = open_lua_state(i_lua_shared, GmodLuaInterfaceRealm::Client);
+			let sv = open_lua_state(i_lua_shared, GmodLuaInterfaceRealm::Server);
 
-		let lua_type = lib
-			.get::<unsafe extern "C-unwind" fn(state: *mut c_void, index: c_int) -> c_int>(b"lua_type")
-			.expect("Failed to find lua_type in lua_shared");
-
-		let lua_gettop = lib
-			.get::<unsafe extern "C-unwind" fn(state: *mut c_void) -> c_int>(b"lua_gettop")
-			.expect("Failed to find lua_gettop in lua_shared");
-
-		let suffix = match () {
-			_ if cfg!(all(target_pointer_width = "64", windows)) => "win64",
-			_ if cfg!(all(target_pointer_width = "32", windows)) => "win32",
-			_ if cfg!(all(target_pointer_width = "64", target_os = "linux")) => "linux64",
-			_ if cfg!(all(target_pointer_width = "32", target_os = "linux")) => "linux",
-			_ if cfg!(target_os = "macos") => "osx",
-			_ => panic!("Unsupported platform"),
-		};
-
-		let cl = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Client);
-		let sv = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Server);
-		let mn = ctor_lua_state(*create_interface, GmodLuaInterfaceRealm::Menu);
-
-		// First check if we're already being loaded by GMOD_LoadBinaryModule
-		for lua in [cl, sv, mn] {
-			if lua.is_null() {
-				// This Lua state isn't active, ignore it
-				continue;
-			}
-
-			if lua_type(lua, 1) == gmod::lua::LUA_TSTRING {
-				// We're already being loaded by GMOD_LoadBinaryModule, bail
-				// This detection really sucks, but it works
+			// This detection really sucks, can't really think of anything better
+			if cl.is_null() && sv.is_null() {
+				// We're being injected if the client and server Lua states are inactive
+			} else {
+				// We're being loaded by GMOD_LoadBinaryModule
 				return;
 			}
 		}
 
-		for (lua, prefix) in [(cl, "gmcl"), (sv, "gmsv"), (mn, "gmsv")] {
-			if lua.is_null() {
-				continue;
+		unsafe extern "cdecl" fn lua_interface_init(this: *mut c_void, a: *mut c_void, b: bool) {
+			log::info!("ILuaInterface::Init");
+
+			let trampoline = core::mem::transmute::<_, LuaInterfaceInitFn>(LUA_INTERFACE_INIT.as_ref().unwrap().trampoline() as *const ());
+			trampoline(this, a, b);
+
+			let lua = get_lua_state(this);
+			log::info!("ILuaInterface::Init -> {:?}", lua);
+			if !lua.is_null() {
+				gmod13_open(gmod::lua::State(lua));
+				log::info!("Injected :)");
+			}
+		}
+
+		unsafe extern "cdecl" fn create_lua_interface(this: *mut c_void, realm: GmodLuaInterfaceRealm, a: bool) -> *mut c_void {
+			log::info!("ILuaShared::CreateLuaInterface({:?}, {:?}, {})", this, realm, a);
+
+			let trampoline = core::mem::transmute::<_, CreateLuaInterfaceFn>(CREATE_LUA_INTERFACE.as_ref().unwrap().trampoline() as *const ());
+			let i_lua_interface = trampoline(this, realm, a);
+			log::info!("ILuaShared::CreateLuaInterface -> {:?}", i_lua_interface);
+
+			if !i_lua_interface.is_null() {
+				let vtable_create_lua_interface = lookup_vtable(i_lua_interface, 1);
+
+				log::info!("ILuaInterface::Init = {:?}", vtable_create_lua_interface);
+
+				LUA_INTERFACE_INIT = Some({
+					let lua_interface_init = gmod::detour::RawDetour::new(vtable_create_lua_interface as *const (), lua_interface_init as *const ())
+						.expect("Failed to hook ILuaShared::CreateLuaInterface");
+					lua_interface_init.enable().expect("Failed to enable ILuaShared::CreateLuaInterface hook");
+					lua_interface_init
+				});
 			}
 
-			let path = OsString::from(format!("garrysmod/lua/bin/{prefix}_rekinect_{suffix}.dll\0"));
-
-			// FIXME
+			i_lua_interface
 		}
+
+		log::info!("Hooking ILuaShared::CreateLuaInterface");
+
+		CREATE_LUA_INTERFACE = Some({
+			let vtable_create_lua_interface = lookup_vtable(i_lua_shared, 4);
+			let create_lua_interface = gmod::detour::RawDetour::new(vtable_create_lua_interface as *const (), create_lua_interface as *const ())
+				.expect("Failed to hook ILuaShared::CreateLuaInterface");
+			create_lua_interface
+				.enable()
+				.expect("Failed to enable ILuaShared::CreateLuaInterface hook");
+			create_lua_interface
+		});
 
 		std::mem::forget(lib);
 	}
 }
 
+#[ctor::dtor]
+fn dtor() {
+	unsafe {
+		if let Some(create_lua_interface) = CREATE_LUA_INTERFACE.take() {
+			create_lua_interface.disable().ok();
+		}
+
+		if let Some(lua_interface_init) = LUA_INTERFACE_INIT.take() {
+			lua_interface_init.disable().ok();
+		}
+
+		KINECT = None;
+	}
+}
+
 fn set_panic_handler() {
 	std::panic::set_hook(Box::new(move |panic| {
-		let path = if let Some(lua) = LUA_STATE.get() {
-			unsafe {
-				lua.get_global(lua_string!("ErrorNoHalt"));
-				lua.push_string(&format!("Kinect panic: {:#?}\n", panic));
-				lua.call(1, 0);
-			}
-			Cow::Borrowed("gm_rekinect_panic.txt")
-		} else {
-			Cow::Owned(format!("gm_rekinect_panic_{}.txt", std::thread::current().id().as_u64()))
-		};
-
-		std::fs::write(path.as_ref(), format!("{:#?}", panic)).ok();
+		std::fs::write(
+			format!("gm_rekinect_panic_{}.log", std::thread::current().id().as_u64()),
+			format!("{:#?}", panic),
+		)
+		.ok();
 	}));
 }

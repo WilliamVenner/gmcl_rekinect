@@ -87,6 +87,8 @@ impl Kinect {
 			// If we drop the library too early, we might crash in the logging calls when we try to print the error that it returned
 			// (as the error is part of that library's address space, which would be deallocated when we drop the library)
 
+			log::info!("{}: Loading...", backend);
+
 			type GmKinectDynInit = unsafe extern "Rust" fn(&'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error>;
 
 			let lib = libloading::Library::new(backend);
