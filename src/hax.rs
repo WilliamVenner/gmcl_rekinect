@@ -71,9 +71,6 @@ macro_rules! dll_paths {
 }
 dll_paths! {
 	client_dll_path => "client"/"client",
-	server_srv_dll_path => "server"/"server_srv",
-	server_dll_path => "server"/"server",
-	lua_shared_srv_dll_path => "lua_shared"/"lua_shared_srv",
 	lua_shared_dll_path => "lua_shared"/"lua_shared"
 }
 
@@ -105,62 +102,22 @@ macro_rules! cluamanager_detours {
 	};
 }
 cluamanager_detours! {
-	server_cluamanager_startup => {
-		hook(this): {
-			trampoline(this);
-			cluamanager_startup(true);
-		},
-		trampoline: SERVER_CLUAMANAGER_STARTUP,
-		sigs: server_cluamanager_startup_sig => {
-			// string search: "-withjit"
-			cfg!(all(target_os = "windows", target_pointer_width = "64")) => "48 89 5C 24 ? 48 89 74 24 ? 57 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 84 24 ? ? ? ? 48 83 3D ? ? ? ? ? 48 8B F1 74 0D 48 8D 0D ? ? ? ? FF 15 ? ? ? ?",
-			cfg!(all(target_os = "windows", target_pointer_width = "32")) => "55 8B EC 81 EC ? ? ? ? 83 3D ? ? ? ? ? 53 8B D9 74",
-			cfg!(all(target_os = "linux", target_pointer_width = "64")) => "55 48 89 E5 41 56 41 55 41 54 53 48 89 FB 48 81 EC ? ? ? ? 64 48 8B 04 25 ? ? ? ? 48 89 45 D8 31 C0 4C 8B 2D ? ? ? ? 49 83 7D ? ? 74 0C 48 8D 3D ? ? ? ? E8 ? ? ? ?",
-			cfg!(all(target_os = "linux", target_pointer_width = "32")) => "55 89 E5 57 56 53 81 EC ? ? ? ? 65 A1 ? ? ? ? 89 45 E4 31 C0 8B 15 ? ? ? ? 8B 5D 08 85 D2 74 0C C7 04 24 ? ? ? ? E8 ? ? ? ?"
-		}
-	},
-
 	client_cluamanager_startup => {
 		hook(this): {
 			trampoline(this);
-			cluamanager_startup(false);
+			cluamanager_startup();
 		},
 		trampoline: CLIENT_CLUAMANAGER_STARTUP,
 		sigs: client_cluamanager_startup_sig => {
 			// string search: "Clientside Lua startup!"
 			cfg!(all(target_pointer_width = "64", target_os = "windows")) => "48 89 5C 24 ? 48 89 74 24 ? 57 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 84 24 ? ? ? ? 48 8B F1 48 8D 0D ? ? ? ? FF 15 ? ? ? ? E8 ? ? ? ?",
-			cfg!(all(target_pointer_width = "32", target_os = "windows")) => "55 8B EC 81 EC ? ? ? ? 53 68 ? ? ? ? 8B D9 FF 15 ? ? ? ? 83 C4 04 E8 ? ? ? ? D9 05 ? ? ? ? 68 ? ? ? ?",
-			cfg!(all(target_pointer_width = "32", target_os = "linux")) => "55 89 E5 57 56 53 81 EC ? ? ? ? 65 A1 ? ? ? ? 89 45 E4 31 C0 C7 04 24 ? ? ? ?"
-		}
-	}
-}
-cluamanager_detours! {
-	server_cluamanager_shutdown => {
-		hook(this): {
-			cluamanager_shutdown();
-			trampoline(this);
-		},
-		trampoline: SERVER_CLUAMANAGER_SHUTDOWN,
-		sigs: server_cluamanager_shutdown_sig => {
-			// CLuaManager::Shutdown() can be found inside Lua::Kill() before the CLuaManager::~CLuaManager() call
-			// Destructor is always the first function in the vtable
-		}
-	},
-
-	client_cluamanager_shutdown => {
-		hook(this): {
-			cluamanager_shutdown();
-			trampoline(this);
-		},
-		trampoline: CLIENT_CLUAMANAGER_SHUTDOWN,
-		sigs: client_cluamanager_shutdown_sig => {
-
+			cfg!(all(target_pointer_width = "32", target_os = "windows")) => "55 8B EC 81 EC ? ? ? ? 53 68 ? ? ? ? 8B D9 FF 15 ? ? ? ? 83 C4 04 E8 ? ? ? ? D9 05 ? ? ? ? 68 ? ? ? ?"
 		}
 	}
 }
 
-unsafe fn cluamanager_startup(srv: bool) {
-	let lib_path = if srv { lua_shared_srv_dll_path() } else { lua_shared_dll_path() };
+unsafe fn cluamanager_startup() {
+	let lib_path = lua_shared_dll_path();
 
 	let lib = {
 		#[cfg(windows)]
@@ -184,15 +141,7 @@ unsafe fn cluamanager_startup(srv: bool) {
 		panic!("Failed to get ILuaShared");
 	}
 
-	let c_lua_interface = open_lua_interface(
-		i_lua_shared,
-		if srv {
-			GmodLuaInterfaceRealm::Server
-		} else {
-			GmodLuaInterfaceRealm::Client
-		},
-	);
-
+	let c_lua_interface = open_lua_interface(i_lua_shared, GmodLuaInterfaceRealm::Client);
 	if c_lua_interface.is_null() {
 		panic!("Failed to get CLuaInterface");
 	}
@@ -209,10 +158,6 @@ unsafe fn cluamanager_startup(srv: bool) {
 	crate::init(gmod::lua::State(lua_state));
 }
 
-unsafe fn cluamanager_shutdown() {
-	crate::shutdown();
-}
-
 pub unsafe fn init() {
 	if is_ctor_binary_module() {
 		// If we were loaded by GMOD_LoadBinaryModule, we don't need to hook CLuaManager::Startup
@@ -225,58 +170,23 @@ pub unsafe fn init() {
 
 	log::info!("DLL injected");
 
-	let server_dll_path = server_dll_path();
 	let client_dll_path = client_dll_path();
 
-	for (dll_path, sig, global, detour) in [
-		(
-			server_dll_path,
-			server_cluamanager_startup_sig(),
-			&mut SERVER_CLUAMANAGER_STARTUP,
-			server_cluamanager_startup as *const (),
-		),
-		(
-			client_dll_path,
-			client_cluamanager_startup_sig(),
-			&mut CLIENT_CLUAMANAGER_STARTUP,
-			client_cluamanager_startup as *const (),
-		),
-	] {
-		log::info!("Hooking CLuaManager::Startup in {dll_path}");
+	let (dll_path, sig, global, detour) = (
+		client_dll_path,
+		client_cluamanager_startup_sig(),
+		&mut CLIENT_CLUAMANAGER_STARTUP,
+		client_cluamanager_startup as *const (),
+	);
+	log::info!("Hooking CLuaManager::Startup in {dll_path}");
 
-		let cluamanager_startup = sig.scan_module(dll_path).expect("Failed to find CLuaManager::Startup") as *const ();
+	let cluamanager_startup = sig.scan_module(dll_path).expect("Failed to find CLuaManager::Startup") as *const ();
 
-		*global = Some({
-			let cluamanager_startup = gmod::detour::RawDetour::new(cluamanager_startup, detour).expect("Failed to hook CLuaManager::Startup");
-			cluamanager_startup.enable().expect("Failed to enable CLuaManager::Startup hook");
-			cluamanager_startup
-		});
-	}
-
-	/*for (dll_path, sig, global, detour) in [
-		(
-			server_dll_path,
-			server_cluamanager_shutdown_sig(),
-			&mut SERVER_CLUAMANAGER_SHUTDOWN,
-			server_cluamanager_shutdown as *const (),
-		),
-		(
-			client_dll_path,
-			client_cluamanager_shutdown_sig(),
-			&mut CLIENT_CLUAMANAGER_SHUTDOWN,
-			client_cluamanager_shutdown as *const (),
-		),
-	] {
-		log::info!("Hooking CLuaManager::Shutdown in {dll_path}");
-
-		let cluamanager_shutdown = sig.scan_module(dll_path).expect("Failed to find CLuaManager::Shutdown") as *const ();
-
-		*global = Some({
-			let cluamanager_shutdown = gmod::detour::RawDetour::new(cluamanager_shutdown, detour).expect("Failed to hook CLuaManager::Shutdown");
-			cluamanager_shutdown.enable().expect("Failed to enable CLuaManager::Shutdown hook");
-			cluamanager_shutdown
-		});
-	}*/
+	*global = Some({
+		let cluamanager_startup = gmod::detour::RawDetour::new(cluamanager_startup, detour).expect("Failed to hook CLuaManager::Startup");
+		cluamanager_startup.enable().expect("Failed to enable CLuaManager::Startup hook");
+		cluamanager_startup
+	});
 }
 
 unsafe fn is_ctor_binary_module() -> bool {

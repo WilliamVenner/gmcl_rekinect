@@ -32,8 +32,6 @@ unsafe fn is_available(lua: gmod::lua::State) -> i32 {
 }
 
 pub unsafe fn init(lua: gmod::lua::State) {
-	log::info!("gmcl_rekinect loaded!");
-
 	{
 		lua.get_global(lua_string!("motionsensor"));
 		if lua.is_nil(-1) {

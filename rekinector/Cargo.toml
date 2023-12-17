@@ -1,0 +1,23 @@
+[package]
+name = "rekinector"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[target.'cfg(windows)'.dependencies]
+dll-syringe = { version = "0.15", default-features = false, features = [
+	"syringe",
+	"into-x86-from-x64",
+] }
+windows = { version = "0.52", features = [
+	"Win32_Foundation",
+	"Win32_System_ProcessStatus",
+	"Win32_System_SystemInformation",
+	"Win32_System_Threading",
+	"Win32_System",
+	"Win32",
+	"Win32_System_Kernel",
+	"Wdk_System_Threading",
+	"Wdk_System",
+	"Wdk",
+] }

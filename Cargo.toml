@@ -6,7 +6,7 @@ authors = ["William Venner <william@venner.io>"]
 publish = false
 
 [workspace]
-members = ["kinect", "kinect-winsdk-v1", "kinect-winsdk-v2"]
+members = ["kinect", "rekinector", "kinect-winsdk-v1", "kinect-winsdk-v2"]
 
 [lib]
 crate-type = ["cdylib"]
