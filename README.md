@@ -46,13 +46,17 @@ gmcl_rekinect comes with a custom DLL injection program for your convenience.
 
 Just open it and it'll watch for Garry's Mod to open. Once it does, it'll inject gmcl_rekinect into the process.
 
+You'll still need to follow the [Installation Instructions](#installation) above before you can use `rekinect``.
+
 [Download](https://github.com/WilliamVenner/gmcl_rekinect/releases)
 
 <p align="center"><img alt="Video" src="https://github.com/WilliamVenner/gmcl_rekinect/assets/14863743/6b09933a-ab0c-4dd4-a341-8628dc72e94c"></p>
 
 ## As a binary module
 
-gmcl_rekinect can be used as a clientside binary module. Some servers will allow you to simply run this console command:
+gmcl_rekinect can be used as a clientside binary module, provided you have followed the [Installation Instructions](#installation) above.
+
+Some servers will allow you to simply run this console command:
 
 ```lua
 lua_run_cl require("rekinect")

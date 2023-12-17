@@ -29,13 +29,3 @@ windows = { version = "0.52", features = [
 
 [build-dependencies]
 cc = "1"
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
-lto = "thin"
-opt-level = 3
-codegen-units = 1
-strip = true
