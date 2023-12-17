@@ -204,7 +204,7 @@ impl<U> WinSdkKinectV1<U> {
 					let ptr = SendPtr(ptr);
 					let userdata = SendPtr(userdata);
 					std::thread::Builder::new()
-						.name("gm_rekinect_winsdk_v1".to_string())
+						.name("rekinect_winsdk_v1".to_string())
 						.spawn(move || unsafe {
 							let ptr = { ptr };
 							let ptr = ptr.0;
@@ -239,7 +239,7 @@ impl<U> Drop for WinSdkKinectV1<U> {
 }
 
 #[no_mangle]
-pub extern "Rust" fn gm_rekinect_init(logger: &'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error> {
+pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error> {
 	log::set_logger(logger).ok();
 	log::set_max_level(log::LevelFilter::Info);
 

@@ -1,5 +1,5 @@
 [package]
-name = "gm_rekinect"
+name = "gmcl_rekinect"
 version = "0.1.0"
 edition = "2021"
 authors = ["William Venner <william@venner.io>"]
@@ -18,6 +18,7 @@ memmap = "0.7"
 libloading = "0.8"
 ctor = "0.2"
 log = "0.4"
+fn_abi = "3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

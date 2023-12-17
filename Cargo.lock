@@ -166,6 +166,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fn_abi"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e5552135c087e231d952256e8310c3c2e81a31175bd9eb55eb0077236e36c2a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+ "syn_squash",
+]
+
+[[package]]
 name = "fn_has_this"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -205,11 +217,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gm_rekinect"
+name = "gmcl_rekinect"
 version = "0.1.0"
 dependencies = [
  "cc",
  "ctor",
+ "fn_abi 3.0.0",
  "gmod",
  "kinect",
  "libc",
@@ -217,28 +230,6 @@ dependencies = [
  "log",
  "memmap",
  "whereami",
- "windows",
-]
-
-[[package]]
-name = "gm_rekinect_winsdk_v1"
-version = "0.1.0"
-dependencies = [
- "build_cfg",
- "cc",
- "kinect",
- "log",
- "windows",
-]
-
-[[package]]
-name = "gm_rekinect_winsdk_v2"
-version = "0.1.0"
-dependencies = [
- "build_cfg",
- "cc",
- "kinect",
- "log",
  "windows",
 ]
 
@@ -251,7 +242,7 @@ dependencies = [
  "cfg_table",
  "cstr",
  "ctor",
- "fn_abi",
+ "fn_abi 2.0.1",
  "fn_has_this",
  "fn_type_alias",
  "gmod-macros",
@@ -496,6 +487,28 @@ dependencies = [
  "libc",
  "mach",
  "winapi",
+]
+
+[[package]]
+name = "rekinect_winsdk_v1"
+version = "0.1.0"
+dependencies = [
+ "build_cfg",
+ "cc",
+ "kinect",
+ "log",
+ "windows",
+]
+
+[[package]]
+name = "rekinect_winsdk_v2"
+version = "0.1.0"
+dependencies = [
+ "build_cfg",
+ "cc",
+ "kinect",
+ "log",
+ "windows",
 ]
 
 [[package]]

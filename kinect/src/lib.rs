@@ -92,7 +92,7 @@ impl Kinect {
 			type GmKinectDynInit = unsafe extern "Rust" fn(&'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error>;
 
 			let lib = libloading::Library::new(backend);
-			let lib = lib.and_then(|lib| Ok((*lib.get::<GmKinectDynInit>(b"gm_rekinect_init")?, lib)));
+			let lib = lib.and_then(|lib| Ok((*lib.get::<GmKinectDynInit>(b"gmcl_rekinect_init")?, lib)));
 
 			match lib {
 				Ok((init, lib)) => match init(log::logger()) {
@@ -125,13 +125,13 @@ impl Kinect {
 		}
 
 		if cfg!(windows) {
-			try_load_backend!("gm_rekinect_winsdk_v2.dll");
-			try_load_backend!("gm_rekinect_winsdk_v1.dll");
+			try_load_backend!("rekinect_winsdk_v2.dll");
+			try_load_backend!("rekinect_winsdk_v1.dll");
 		}
 
 		Err(std::io::Error::new(
 			std::io::ErrorKind::Unsupported,
-			"No backend available, did you remember to install one? https://github.com/WilliamVenner/gm_rekinect",
+			"No backend available, did you remember to install one? https://github.com/WilliamVenner/gmcl_rekinect",
 		))
 	}
 
