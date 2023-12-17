@@ -27,8 +27,6 @@ jobs:
 
     - name: Rename binaries
       run: |
-        mkdir release
-        rmdir /S /Q release
         mkdir release\bin
         mkdir release\gmcl_rekinect
 
