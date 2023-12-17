@@ -35,7 +35,11 @@ todo
 
 ### Using `rekinector` (recommended)
 
-todo
+gmcl_rekinect comes with a custom injection program for your convenience.
+
+Just open it and it'll watch for Garry's Mod to open. Once it does, it'll inject gmcl_rekinect into the process.
+
+[Download](https://github.com/WilliamVenner/gmcl_rekinect/releases)
 
 ### As a binary module
 

@@ -213,7 +213,7 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 		tx.send(event).ok();
 	}
 
-	let (tx, rx) = std::sync::mpsc::sync_channel(0);
+	let (tx, rx) = std::sync::mpsc::sync_channel(1);
 	let kinect = WinSdkKinectV2::new(callback, tx)?;
 
 	struct WinSdkKinectBackend {
