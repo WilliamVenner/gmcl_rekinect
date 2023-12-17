@@ -19,11 +19,8 @@ jobs:
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly --profile minimal -y
         rustup target add i686-pc-windows-msvc
 
-    - name: Build 64-bit
-      run: cargo build --release --target x86_64-pc-windows-msvc --package rekinector --package gmcl_rekinect --package rekinect_winsdk_v1 --package rekinect_winsdk_v2
-
-    - name: Build 32-bit
-      run: cargo build --release --target i686-pc-windows-msvc --package rekinector --package gmcl_rekinect --package rekinect_winsdk_v1 --package rekinect_winsdk_v2
+    - name: Build
+      run: cargo build --release --target x86_64-pc-windows-msvc --target i686-pc-windows-msvc --package rekinector --package gmcl_rekinect --package rekinect_winsdk_v1 --package rekinect_winsdk_v2
 
     - name: Rename binaries
       run: |
