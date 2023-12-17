@@ -43,6 +43,7 @@ jobs:
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
+        token: ${{ secrets.GH_PAT_TOKEN }}
         files: |
           release/bin/gmcl_rekinect_win.zip
           release/bin/rekinector_win32.exe
