@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+	borrow::Cow,
+	path::{Path, PathBuf},
+};
 
 #[macro_use]
 extern crate build_cfg;
@@ -16,7 +19,12 @@ fn main() {
 	println!("cargo:rerun-if-changed=src/kinect_winsdk_v2.cpp");
 	println!("cargo:rerun-if-changed=src/kinect_winsdk_v2.hpp");
 
-	let kinect_v2_sdk_path = PathBuf::from(std::env::var_os("KINECTSDK20_DIR").expect("KINECTSDK20_DIR not set"));
+	let kinect_v2_sdk_path = std::env::var_os("KINECTSDK20_DIR")
+		.map(PathBuf::from)
+		.map(Cow::Owned)
+		.unwrap_or_else(|| Cow::Borrowed(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../lib/kinect_winsdk_v2"))));
+
+	let kinect_v2_sdk_path = kinect_v2_sdk_path.as_ref();
 
 	println!("cargo:rustc-link-lib=kinect20");
 	println!(
