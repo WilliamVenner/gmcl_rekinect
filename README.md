@@ -42,11 +42,11 @@
 
 ## Using `rekinector` (recommended)
 
-gmcl_rekinect comes with a custom DLL injection program for your convenience.
+gmcl_rekinect comes with a custom DLL injection program called `rekinector` for your convenience.
 
 Just open it and it'll watch for Garry's Mod to open. Once it does, it'll inject gmcl_rekinect into the process.
 
-You'll still need to follow the [Installation Instructions](#installation) above before you can use `rekinect``.
+You'll still need to follow the [Installation Instructions](#installation) above before you can use `rekinect`.
 
 [Download](https://github.com/WilliamVenner/gmcl_rekinect/releases)
 
