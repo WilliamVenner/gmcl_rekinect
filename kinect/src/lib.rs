@@ -115,7 +115,7 @@ impl Kinect {
 		}
 
 		macro_rules! try_load_backend {
-			($backend:literal) => {
+			($backend:expr) => {
 				for backend in [concat!("garrysmod/lua/bin/", $backend), $backend] {
 					if let Some(backend) = unsafe { load_rekinect_dyn(backend) } {
 						return Ok(backend);
@@ -124,9 +124,12 @@ impl Kinect {
 			};
 		}
 
-		if cfg!(windows) {
-			try_load_backend!("rekinect_winsdk_v2.dll");
-			try_load_backend!("rekinect_winsdk_v1.dll");
+		if cfg!(all(windows, target_pointer_width = "64")) {
+			try_load_backend!("rekinect_winsdk_v2_win64.dll");
+			try_load_backend!("rekinect_winsdk_v1_win64.dll");
+		} else if cfg!(all(windows, target_pointer_width = "32")) {
+			try_load_backend!("rekinect_winsdk_v2_win32.dll");
+			try_load_backend!("rekinect_winsdk_v1_win32.dll");
 		}
 
 		Err(std::io::Error::new(
