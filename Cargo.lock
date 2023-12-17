@@ -240,12 +240,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gcc"
-version = "0.3.55"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,7 +262,6 @@ dependencies = [
  "libloading",
  "log",
  "memmap",
- "whereami",
  "windows",
 ]
 
@@ -899,16 +892,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "whereami"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29666e790f2ed77339c2a1a84d184a60e49f8825eca2f68d684d8ed026cd7ea6"
-dependencies = [
- "gcc",
- "libc",
-]
 
 [[package]]
 name = "widestring"

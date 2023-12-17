@@ -1,0 +1,41 @@
+[package]
+name = "gmcl_rekinect"
+version = "0.1.0"
+edition = "2021"
+authors = ["William Venner <william@venner.io>"]
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kinect = { path = "../kinect" }
+gmod = "17"
+memmap = "0.7"
+libloading = "0.8"
+ctor = "0.2"
+log = "0.4"
+fn_abi = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [
+	"Win32_Foundation",
+	"Win32_System",
+	"Win32_System_LibraryLoader",
+] }
+
+[build-dependencies]
+cc = "1"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "thin"
+opt-level = 3
+codegen-units = 1
+strip = true

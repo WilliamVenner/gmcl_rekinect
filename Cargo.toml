@@ -1,38 +1,12 @@
-[package]
-name = "gmcl_rekinect"
-version = "0.1.0"
-edition = "2021"
-authors = ["William Venner <william@venner.io>"]
-publish = false
-
 [workspace]
-members = ["kinect", "rekinector", "kinect-winsdk-v1", "kinect-winsdk-v2"]
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-kinect = { path = "kinect" }
-gmod = "17"
-memmap = "0.7"
-libloading = "0.8"
-ctor = "0.2"
-log = "0.4"
-fn_abi = "3"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-whereami = "1"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", features = [
-	"Win32_Foundation",
-	"Win32_System",
-	"Win32_System_LibraryLoader",
-] }
-
-[build-dependencies]
-cc = "1"
+resolver = "2"
+members = [
+	"gmcl_rekinect",
+	"kinect",
+	"rekinector",
+	"kinect-winsdk-v1",
+	"kinect-winsdk-v2",
+]
 
 [profile.dev]
 panic = "abort"
