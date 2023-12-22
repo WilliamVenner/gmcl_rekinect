@@ -74,7 +74,7 @@ void WinSdkKinectV1::Update(DWORD event)
 	}
 }
 
-void WinSdkKinectV1::DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData)
+void CALLBACK WinSdkKinectV1::DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData)
 {
 	WinSdkKinectV1 *kinect = (WinSdkKinectV1 *)pUserData;
 

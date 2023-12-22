@@ -4,7 +4,7 @@
 
 extern "C"
 {
-	typedef struct WinSdkKinectV1SkeletonUpdate
+	struct WinSdkKinectV1SkeletonUpdate
 	{
 		uintptr_t skeletonIndex;
 		Vector4 *bones;
@@ -31,7 +31,7 @@ private:
 	/// Handle new skeleton data
 	void ProcessSkeleton();
 
-	static void DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData);
+	static void CALLBACK DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData);
 
 	WinSdkKinectV1Callback m_Callback;
 
