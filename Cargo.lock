@@ -251,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "gmcl_rekinect"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
  "ctor",
@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "kinect"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ctrlc",
  "env_logger",
@@ -625,7 +625,7 @@ dependencies = [
 
 [[package]]
 name = "rekinect_winsdk_v1"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "build_cfg",
  "cc",
@@ -636,7 +636,7 @@ dependencies = [
 
 [[package]]
 name = "rekinect_winsdk_v2"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "build_cfg",
  "cc",

@@ -4,23 +4,10 @@
 
 extern "C"
 {
-	typedef struct WinSdkKinectV1SkeletonWithBones
-	{
-		Vector4 *pos;
-		Vector4 *bones;
-	};
-
-	typedef union WinSdkKinectV1Skeleton
-	{
-		Vector4 *positionOnly;
-		WinSdkKinectV1SkeletonWithBones tracked;
-	};
-
 	typedef struct WinSdkKinectV1SkeletonUpdate
 	{
 		uintptr_t skeletonIndex;
-		NUI_SKELETON_TRACKING_STATE state;
-		WinSdkKinectV1Skeleton skeleton;
+		Vector4 *bones;
 	};
 
 	typedef void (*WinSdkKinectV1Callback)(WinSdkKinectV1SkeletonUpdate, void *);
@@ -34,44 +21,41 @@ public:
 
 	void Run();
 
-	/// Create the first connected Kinect found
-	HRESULT CreateFirstConnected();
+	HRESULT MonitorSensors();
 
 	void *m_pCallbackUserData;
 
 private:
-	void Update();
+	void Update(DWORD event);
 
 	/// Handle new skeleton data
 	void ProcessSkeleton();
 
-	WinSdkKinectV1Callback m_Callback;
+	static void DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData);
 
-	bool m_bSeatedMode;
+	WinSdkKinectV1Callback m_Callback;
 
 	// Current Kinect
 	INuiSensor *m_pNuiSensor;
-	HANDLE m_pSkeletonStreamHandle;
 	HANDLE m_hNextSkeletonEvent;
 
-	NUI_SKELETON_TRACKING_STATE m_SkeletonTrackingStates[NUI_SKELETON_COUNT];
+	bool m_SkeletonTrackingStates[NUI_SKELETON_COUNT];
 };
 
 extern "C" WinSdkKinectV1 *WinSdkKinectV1_Create(WinSdkKinectV1Callback callback, void *userdata, HRESULT *result)
 {
-	WinSdkKinectV1 *pKinect = new WinSdkKinectV1(callback, userdata);
+	WinSdkKinectV1 *kinect = new WinSdkKinectV1(callback, userdata);
 
-	*result = pKinect->CreateFirstConnected();
-
-	if (FAILED(*result))
+	if (kinect)
 	{
-		return NULL;
+		*result = kinect->MonitorSensors();
 	}
 	else
 	{
-		*result = S_OK;
-		return pKinect;
+		*result = E_FAIL;
 	}
+
+	return kinect;
 }
 
 extern "C" void WinSdkKinectV1_Destroy(WinSdkKinectV1 *pKinect)

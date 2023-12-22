@@ -4,10 +4,9 @@
 
 extern "C"
 {
-	typedef struct WinSdkKinectV2SkeletonUpdate
+	struct WinSdkKinectV2SkeletonUpdate
 	{
 		uintptr_t skeletonIndex;
-		bool state;
 		CameraSpacePoint *skeleton;
 	};
 
@@ -31,19 +30,25 @@ private:
 	// Current Kinect
 	IKinectSensor *m_pKinectSensor;
 	ICoordinateMapper *m_pCoordinateMapper;
+	WAITABLE_HANDLE m_AvailablityChangedEvent;
+	WAITABLE_HANDLE m_BodyFrameArrivedEvent;
 
 	// Body reader
 	IBodyFrameReader *m_pBodyFrameReader;
 
 	WinSdkKinectV2Callback m_Callback;
 
-	bool m_SkeletonTrackingStates[BODY_COUNT];
+	BOOLEAN m_SkeletonTrackingStates[BODY_COUNT];
 
 	/// Main processing function
-	void Update();
+	void Update(DWORD event);
 
 	/// Handle new body data
 	void ProcessBody(IBody **ppBodies);
+
+	// Event handlers
+	void AvailableChanged();
+	void BodyFrameArrived();
 };
 
 extern "C" WinSdkKinectV2 *WinSdkKinectV2_Create(WinSdkKinectV2Callback callback, void *userdata, HRESULT *result)

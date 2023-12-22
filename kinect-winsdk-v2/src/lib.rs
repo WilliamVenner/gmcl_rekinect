@@ -4,7 +4,7 @@ use kinect::{KinectBackend, KinectSkeleton, KinectSkeletonBones, KinectTrackedSk
 use std::{
 	ffi::c_void,
 	marker::PhantomData,
-	mem::{ManuallyDrop, MaybeUninit},
+	mem::ManuallyDrop,
 	ops::{Add, Div},
 	os::windows::io::AsRawHandle,
 };
@@ -45,14 +45,13 @@ unsafe impl<T> Sync for SendPtr<T> {}
 #[repr(C)]
 struct WinSdkKinectV2SkeletonUpdate {
 	skeleton_index: usize,
-	state: bool,
-	pos: MaybeUninit<*const SensorBones>,
+	skeleton: *const SensorBones,
 }
 impl WinSdkKinectV2SkeletonUpdate {
 	#[inline]
-	fn pos(&self) -> Option<&SensorBones> {
-		if self.state {
-			Some(unsafe { &*self.pos.assume_init() })
+	fn skeleton(&self) -> Option<&SensorBones> {
+		if !self.skeleton.is_null() {
+			Some(unsafe { &*self.skeleton })
 		} else {
 			None
 		}
@@ -62,8 +61,7 @@ impl std::fmt::Debug for WinSdkKinectV2SkeletonUpdate {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("WinSdkKinectV2SkeletonUpdate")
 			.field("skeleton_index", &self.skeleton_index)
-			.field("state", &self.state)
-			.field("pos", &self.pos())
+			.field("skeleton", &self.skeleton())
 			.finish()
 	}
 }
@@ -225,32 +223,32 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 		fn poll(&mut self) -> Option<KinectSkeleton> {
 			let event = self.rx.try_recv().ok()?;
 			if self.skeleton.is_none() || self.skeleton == Some(event.skeleton_index) {
-				if let Some(pos) = event.pos() {
+				if let Some(skeleton) = event.skeleton() {
 					self.skeleton = Some(event.skeleton_index);
 
-					let pos = unsafe { pos.named };
+					let bones = unsafe { skeleton.named };
 					return Some(KinectSkeleton::Tracked(KinectTrackedSkeleton::from_named_bones(KinectSkeletonBones {
-						spine: pos.spine_mid.into_gmod(),
-						hip_center: ((pos.hip_left + pos.hand_right) / 2.0).into_gmod(),
-						shoulder_center: ((pos.shoulder_left + pos.shoulder_right) / 2.0).into_gmod(),
+						spine: bones.spine_mid.into_gmod(),
+						hip_center: ((bones.hip_left + bones.hip_right) / 2.0).into_gmod(),
+						shoulder_center: ((bones.shoulder_left + bones.shoulder_right) / 2.0).into_gmod(),
 
-						head: pos.head.into_gmod(),
-						shoulder_left: pos.shoulder_left.into_gmod(),
-						elbow_left: pos.elbow_left.into_gmod(),
-						wrist_left: pos.wrist_left.into_gmod(),
-						hand_left: pos.hand_left.into_gmod(),
-						shoulder_right: pos.shoulder_right.into_gmod(),
-						elbow_right: pos.elbow_right.into_gmod(),
-						wrist_right: pos.wrist_right.into_gmod(),
-						hand_right: pos.hand_right.into_gmod(),
-						hip_left: pos.hip_left.into_gmod(),
-						knee_left: pos.knee_left.into_gmod(),
-						ankle_left: pos.ankle_left.into_gmod(),
-						foot_left: pos.foot_left.into_gmod(),
-						hip_right: pos.hip_right.into_gmod(),
-						knee_right: pos.knee_right.into_gmod(),
-						ankle_right: pos.ankle_right.into_gmod(),
-						foot_right: pos.foot_right.into_gmod(),
+						head: bones.head.into_gmod(),
+						shoulder_left: bones.shoulder_left.into_gmod(),
+						elbow_left: bones.elbow_left.into_gmod(),
+						wrist_left: bones.wrist_left.into_gmod(),
+						hand_left: bones.hand_left.into_gmod(),
+						shoulder_right: bones.shoulder_right.into_gmod(),
+						elbow_right: bones.elbow_right.into_gmod(),
+						wrist_right: bones.wrist_right.into_gmod(),
+						hand_right: bones.hand_right.into_gmod(),
+						hip_left: bones.hip_left.into_gmod(),
+						knee_left: bones.knee_left.into_gmod(),
+						ankle_left: bones.ankle_left.into_gmod(),
+						foot_left: bones.foot_left.into_gmod(),
+						hip_right: bones.hip_right.into_gmod(),
+						knee_right: bones.knee_right.into_gmod(),
+						ankle_right: bones.ankle_right.into_gmod(),
+						foot_right: bones.foot_right.into_gmod(),
 					})));
 				} else if self.skeleton.is_some() {
 					self.skeleton = None;

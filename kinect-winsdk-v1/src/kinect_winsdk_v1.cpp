@@ -12,15 +12,13 @@ inline void SafeRelease(Interface *&pInterfaceToRelease)
 
 WinSdkKinectV1::WinSdkKinectV1(
 	WinSdkKinectV1Callback callback, void *userdata) : m_hNextSkeletonEvent(INVALID_HANDLE_VALUE),
-													   m_pSkeletonStreamHandle(INVALID_HANDLE_VALUE),
-													   m_bSeatedMode(false),
 													   m_pNuiSensor(NULL),
 													   m_Callback(callback),
 													   m_pCallbackUserData(userdata)
 {
 	for (int i = 0; i < NUI_SKELETON_COUNT; ++i)
 	{
-		m_SkeletonTrackingStates[i] = NUI_SKELETON_NOT_TRACKED;
+		m_SkeletonTrackingStates[i] = false;
 	}
 }
 
@@ -54,11 +52,11 @@ void WinSdkKinectV1::Run()
 		// Check to see if we have either a message (by passing in QS_ALLEVENTS)
 		// Or a Kinect event (hEvents)
 		// Update() will check for Kinect events individually, in case more than one are signalled
-		MsgWaitForMultipleObjects(eventCount, hEvents, FALSE, INFINITE, QS_ALLINPUT);
+		DWORD event = MsgWaitForMultipleObjects(eventCount, hEvents, FALSE, INFINITE, QS_ALLINPUT);
 
 		// Explicitly check the Kinect frame event since MsgWaitForMultipleObjects
 		// can return for other reasons even though it is signaled.
-		Update();
+		Update(WAIT_OBJECT_0 - event);
 
 		while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
 		{
@@ -68,24 +66,78 @@ void WinSdkKinectV1::Run()
 	}
 }
 
-void WinSdkKinectV1::Update()
+void WinSdkKinectV1::Update(DWORD event)
 {
-	if (NULL == m_pNuiSensor)
-	{
-		return;
-	}
-
-	// Wait for 0ms, just quickly test if it is time to process a skeleton
-	if (WAIT_OBJECT_0 == WaitForSingleObject(m_hNextSkeletonEvent, 0))
+	if (event == 0)
 	{
 		ProcessSkeleton();
 	}
 }
 
-/// Create the first connected Kinect found
-HRESULT WinSdkKinectV1::CreateFirstConnected()
+void WinSdkKinectV1::DeviceStatusChanged(HRESULT hrStatus, const OLECHAR *instanceName, const OLECHAR *uniqueDeviceName, void *pUserData)
 {
-	INuiSensor *pNuiSensor;
+	WinSdkKinectV1 *kinect = (WinSdkKinectV1 *)pUserData;
+
+	if (kinect->m_pNuiSensor)
+	{
+		kinect->m_pNuiSensor->NuiShutdown();
+		kinect->m_pNuiSensor->Release();
+		kinect->m_pNuiSensor = NULL;
+
+		for (int i = 0; i < NUI_SKELETON_COUNT; ++i)
+		{
+			bool trackingStateChanged = kinect->m_SkeletonTrackingStates[i] != false;
+
+			kinect->m_SkeletonTrackingStates[i] = false;
+
+			if (trackingStateChanged)
+			{
+				kinect->m_Callback({(uintptr_t)i, NULL}, kinect->m_pCallbackUserData);
+			}
+		}
+	}
+
+	if (SUCCEEDED(hrStatus))
+	{
+		INuiSensor *pNuiSensor;
+		HRESULT hr = NuiCreateSensorById(instanceName, &pNuiSensor);
+
+		if (SUCCEEDED(hr))
+		{
+			// Get the status of the sensor, and if connected, then we can initialize it
+			hr = pNuiSensor->NuiStatus();
+
+			if (SUCCEEDED(hr))
+			{
+				// Initialize the Kinect and specify that we'll be using skeleton
+				hr = pNuiSensor->NuiInitialize(NUI_INITIALIZE_FLAG_USES_SKELETON);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				// Open a skeleton stream to receive skeleton data
+				hr = pNuiSensor->NuiSkeletonTrackingEnable(kinect->m_hNextSkeletonEvent, 0);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				kinect->m_pNuiSensor = pNuiSensor;
+			}
+			else
+			{
+				// This sensor wasn't OK, so release it since we're not using it
+				pNuiSensor->Release();
+			}
+		}
+	}
+}
+
+HRESULT WinSdkKinectV1::MonitorSensors()
+{
+	// Create an event that will be signaled when skeleton data is available
+	m_hNextSkeletonEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
+	NuiSetDeviceStatusCallback(WinSdkKinectV1::DeviceStatusChanged, this);
 
 	int iSensorCount = 0;
 	HRESULT hr = NuiGetSensorCount(&iSensorCount);
@@ -93,6 +145,8 @@ HRESULT WinSdkKinectV1::CreateFirstConnected()
 	{
 		return hr;
 	}
+
+	INuiSensor *pNuiSensor;
 
 	// Look at each Kinect sensor
 	for (int i = 0; i < iSensorCount; ++i)
@@ -123,17 +177,9 @@ HRESULT WinSdkKinectV1::CreateFirstConnected()
 
 		if (SUCCEEDED(hr))
 		{
-			// Create an event that will be signaled when skeleton data is available
-			m_hNextSkeletonEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-
 			// Open a skeleton stream to receive skeleton data
 			hr = m_pNuiSensor->NuiSkeletonTrackingEnable(m_hNextSkeletonEvent, 0);
 		}
-	}
-
-	if (NULL == m_pNuiSensor)
-	{
-		return E_FAIL;
 	}
 
 	return hr;
@@ -142,6 +188,11 @@ HRESULT WinSdkKinectV1::CreateFirstConnected()
 /// Handle new skeleton data
 void WinSdkKinectV1::ProcessSkeleton()
 {
+	if (NULL == m_pNuiSensor)
+	{
+		return;
+	}
+
 	NUI_SKELETON_FRAME skeletonFrame = {0};
 
 	const HRESULT hr = m_pNuiSensor->NuiSkeletonGetNextFrame(0, &skeletonFrame);
@@ -155,33 +206,19 @@ void WinSdkKinectV1::ProcessSkeleton()
 
 	for (int i = 0; i < NUI_SKELETON_COUNT; ++i)
 	{
-		const NUI_SKELETON_TRACKING_STATE trackingState = skeletonFrame.SkeletonData[i].eTrackingState;
+		bool bIsTracked = skeletonFrame.SkeletonData[i].eTrackingState == NUI_SKELETON_TRACKED;
 
-		const bool trackingStateChanged = trackingState != m_SkeletonTrackingStates[i];
+		const bool trackingStateChanged = bIsTracked != m_SkeletonTrackingStates[i];
 
-		m_SkeletonTrackingStates[i] = trackingState;
+		m_SkeletonTrackingStates[i] = bIsTracked;
 
-		if (NUI_SKELETON_NOT_TRACKED == trackingState)
+		if (bIsTracked)
 		{
-			if (trackingStateChanged)
-			{
-				m_Callback({(uintptr_t)i, NUI_SKELETON_NOT_TRACKED}, m_pCallbackUserData);
-			}
+			m_Callback({(uintptr_t)i, skeletonFrame.SkeletonData[i].SkeletonPositions}, m_pCallbackUserData);
 		}
-		else
+		else if (trackingStateChanged)
 		{
-			if (NUI_SKELETON_TRACKED == trackingState)
-			{
-				WinSdkKinectV1Skeleton skeleton;
-				skeleton.tracked = {&skeletonFrame.SkeletonData[i].Position, skeletonFrame.SkeletonData[i].SkeletonPositions};
-				m_Callback({(uintptr_t)i, NUI_SKELETON_TRACKED, skeleton}, m_pCallbackUserData);
-			}
-			else if (NUI_SKELETON_POSITION_ONLY == trackingState)
-			{
-				WinSdkKinectV1Skeleton skeleton;
-				skeleton.positionOnly = &skeletonFrame.SkeletonData[i].Position;
-				m_Callback({(uintptr_t)i, NUI_SKELETON_POSITION_ONLY, skeleton}, m_pCallbackUserData);
-			}
+			m_Callback({(uintptr_t)i, NULL}, m_pCallbackUserData);
 		}
 	}
 }

@@ -1,12 +1,7 @@
 #![cfg(windows)]
 
 use kinect::{KinectBackend, KinectSkeleton, KinectSkeletonRawBones, KinectTrackedSkeleton};
-use std::{
-	ffi::c_void,
-	marker::PhantomData,
-	mem::{ManuallyDrop, MaybeUninit},
-	os::windows::io::AsRawHandle,
-};
+use std::{ffi::c_void, marker::PhantomData, mem::ManuallyDrop, os::windows::io::AsRawHandle};
 use windows::{
 	core::HRESULT,
 	Win32::{
@@ -19,18 +14,13 @@ use windows::{
 const BONE_COUNT: usize = 20;
 
 #[inline]
-fn convert_kinect_coordinate_space_to_gmod(vector: &Vector4) -> Vector4 {
-	Vector4 {
-		x: -vector.x,
-		y: vector.z,
-		z: vector.y,
-		w: vector.w,
-	}
+fn convert_kinect_coordinate_space_to_gmod(vector: &Vector4) -> [f32; 3] {
+	[-vector.x, vector.z, vector.y]
 }
 
 #[link(name = "kinect_winsdk_v1_cpp", kind = "static")]
 extern "C" {
-	fn WinSdkKinectV1_Create(callback: CWinSdkKinectV1Callback, userdata: *mut c_void, res: &mut HRESULT) -> *mut c_void;
+	fn WinSdkKinectV1_Create(callback: CWinSdkKinectV1Callback, userdata: *mut c_void, result: &mut HRESULT) -> *mut c_void;
 	fn WinSdkKinectV1_Destroy(ptr: *mut c_void);
 	fn WinSdkKinectV1_Run(ptr: *mut c_void);
 }
@@ -45,16 +35,15 @@ unsafe impl<T> Sync for SendPtr<T> {}
 #[repr(C)]
 struct WinSdkKinectV1SkeletonUpdate {
 	skeleton_index: usize,
-	state: SkeletonTrackingState,
-	pos: MaybeUninit<SkeletonPos>,
+	skeleton: *const WinSdkKinectV1Skeleton,
 }
 impl WinSdkKinectV1SkeletonUpdate {
 	#[inline]
-	fn pos(&self) -> Option<WinSdkKinectV1Skeleton> {
-		match self.state {
-			SkeletonTrackingState::NotTracked => None,
-			SkeletonTrackingState::PositionOnly => Some(WinSdkKinectV1Skeleton::PositionOnly(unsafe { self.pos.assume_init_ref().pos_only })),
-			SkeletonTrackingState::Tracked => Some(WinSdkKinectV1Skeleton::Tracked(unsafe { self.pos.assume_init_ref().tracked })),
+	fn skeleton(&self) -> Option<&WinSdkKinectV1Skeleton> {
+		if !self.skeleton.is_null() {
+			Some(unsafe { &*self.skeleton })
+		} else {
+			None
 		}
 	}
 }
@@ -62,79 +51,9 @@ impl std::fmt::Debug for WinSdkKinectV1SkeletonUpdate {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("WinSdkKinectV1SkeletonUpdate")
 			.field("skeleton_index", &self.skeleton_index)
-			.field("state", &self.state)
-			.field("pos", &self.pos())
+			.field("skeleton", &self.skeleton())
 			.finish()
 	}
-}
-
-#[repr(C)]
-union SkeletonPos {
-	pos_only: SkeletonPositionOnly,
-	tracked: SkeletonTracked,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-struct SkeletonPositionOnly {
-	pos: *const Vector4,
-}
-impl SkeletonPositionOnly {
-	#[inline(always)]
-	fn pos(&self) -> &Vector4 {
-		unsafe { &*self.pos }
-	}
-}
-impl std::fmt::Debug for SkeletonPositionOnly {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("SkeletonPositionOnly").field("pos", &self.pos()).finish()
-	}
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-struct SkeletonTracked {
-	pos: *const Vector4,
-	bones: *const SensorBones,
-}
-impl SkeletonTracked {
-	#[inline(always)]
-	fn pos(&self) -> &Vector4 {
-		unsafe { &*self.pos }
-	}
-
-	#[inline(always)]
-	fn bones(&self) -> &NamedSensorBones {
-		unsafe { &(*self.bones).named }
-	}
-
-	#[inline(always)]
-	fn raw_bones(&self) -> &[Vector4; BONE_COUNT] {
-		unsafe { &(*self.bones).raw }
-	}
-}
-impl std::fmt::Debug for SkeletonTracked {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("SkeletonTracked")
-			.field("pos", &self.pos())
-			.field("bones", &self.bones())
-			.finish()
-	}
-}
-
-#[derive(Debug, Clone, Copy)]
-enum WinSdkKinectV1Skeleton {
-	PositionOnly(SkeletonPositionOnly),
-	Tracked(SkeletonTracked),
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
-enum SkeletonTrackingState {
-	NotTracked = 0,
-	PositionOnly = 1,
-	Tracked = 2,
 }
 
 #[repr(C)]
@@ -146,14 +65,26 @@ struct Vector4 {
 	w: f32,
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
-union SensorBones {
+union WinSdkKinectV1Skeleton {
 	raw: [Vector4; BONE_COUNT],
 	named: NamedSensorBones,
 }
-impl std::fmt::Debug for SensorBones {
+impl WinSdkKinectV1Skeleton {
+	#[inline(always)]
+	fn named_bones(&self) -> &NamedSensorBones {
+		unsafe { &self.named }
+	}
+
+	#[inline(always)]
+	fn raw_bones(&self) -> &[Vector4; BONE_COUNT] {
+		unsafe { &self.raw }
+	}
+}
+impl std::fmt::Debug for WinSdkKinectV1Skeleton {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		unsafe { self.named.fmt(f) }
+		f.debug_struct("WinSdkKinectV1Skeleton").field("bones", &self.named_bones()).finish()
 	}
 }
 
@@ -259,14 +190,13 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 		fn poll(&mut self) -> Option<KinectSkeleton> {
 			let event = self.rx.try_recv().ok()?;
 			if self.skeleton.is_none() || self.skeleton == Some(event.skeleton_index) {
-				if let Some(WinSdkKinectV1Skeleton::Tracked(pos)) = event.pos() {
+				if let Some(skeleton) = event.skeleton() {
 					self.skeleton = Some(event.skeleton_index);
 
 					let mut raw_bones = KinectSkeletonRawBones::default();
 
-					pos.raw_bones().iter().zip(raw_bones.iter_mut()).for_each(|(src, dst)| {
-						let src = convert_kinect_coordinate_space_to_gmod(src);
-						*dst = [src.x, src.y, src.z];
+					skeleton.raw_bones().iter().zip(raw_bones.iter_mut()).for_each(|(src, dst)| {
+						*dst = convert_kinect_coordinate_space_to_gmod(src);
 					});
 
 					return Some(KinectSkeleton::Tracked(KinectTrackedSkeleton::from_raw_bones(raw_bones)));

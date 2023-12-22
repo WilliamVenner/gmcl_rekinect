@@ -76,49 +76,52 @@ pub struct KinectSkeletonBones {
 	pub foot_right: [f32; 3],
 }
 
-pub struct Kinect {
+pub struct DynKinectBackend {
 	backend: Box<dyn KinectBackend>,
 	_lib: libloading::Library,
 }
-impl Kinect {
-	pub fn new() -> Result<Self, std::io::Error> {
-		unsafe fn load_rekinect_dyn(backend: &str) -> Option<Kinect> {
-			// This function looks kind of weird because we need to be careful about the drop order of the libloading::Library.
-			// If we drop the library too early, we might crash in the logging calls when we try to print the error that it returned
-			// (as the error is part of that library's address space, which would be deallocated when we drop the library)
+impl DynKinectBackend {
+	unsafe fn load(backend: &str) -> Option<Self> {
+		log::info!("{}: Loading...", backend);
 
-			log::info!("{}: Loading...", backend);
+		type GmKinectDynInit = unsafe extern "Rust" fn(&'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error>;
 
-			type GmKinectDynInit = unsafe extern "Rust" fn(&'static dyn log::Log) -> Result<Box<dyn KinectBackend>, std::io::Error>;
+		let lib = libloading::Library::new(backend);
+		let lib = lib.and_then(|lib| Ok((*lib.get::<GmKinectDynInit>(b"gmcl_rekinect_init")?, lib)));
 
-			let lib = libloading::Library::new(backend);
-			let lib = lib.and_then(|lib| Ok((*lib.get::<GmKinectDynInit>(b"gmcl_rekinect_init")?, lib)));
-
-			match lib {
-				Ok((init, lib)) => match init(log::logger()) {
-					Ok(kinect) => {
-						log::info!("{}: OK!", backend);
-						Some(Kinect { _lib: lib, backend: kinect })
-					}
-
-					Err(err) => {
-						log::warn!("{}: {err:?}", backend);
-						None
-					}
-				},
+		match lib {
+			Ok((init, lib)) => match init(log::logger()) {
+				Ok(kinect) => {
+					log::info!("{}: OK!", backend);
+					Some(Self { _lib: lib, backend: kinect })
+				}
 
 				Err(err) => {
 					log::warn!("{}: {err:?}", backend);
 					None
 				}
+			},
+
+			Err(err) => {
+				log::warn!("{}: {err:?}", backend);
+				None
 			}
 		}
+	}
+}
+
+pub struct Kinect {
+	backends: Box<[DynKinectBackend]>,
+}
+impl Kinect {
+	pub fn new() -> Result<Self, std::io::Error> {
+		let mut backends = Vec::new();
 
 		macro_rules! try_load_backend {
 			($backend:expr) => {
-				for backend in [concat!("garrysmod/lua/bin/", $backend), $backend] {
-					if let Some(backend) = unsafe { load_rekinect_dyn(backend) } {
-						return Ok(backend);
+				for backend in [$backend, concat!("garrysmod/lua/bin/", $backend)] {
+					if let Some(backend) = unsafe { DynKinectBackend::load(backend) } {
+						backends.push(backend);
 					}
 				}
 			};
@@ -132,14 +135,20 @@ impl Kinect {
 			try_load_backend!("rekinect_winsdk_v1_win32.dll");
 		}
 
-		Err(std::io::Error::new(
-			std::io::ErrorKind::Unsupported,
-			"No backend available, did you remember to install one? https://github.com/WilliamVenner/gmcl_rekinect",
-		))
+		if !backends.is_empty() {
+			Ok(Kinect {
+				backends: backends.into_boxed_slice(),
+			})
+		} else {
+			Err(std::io::Error::new(
+				std::io::ErrorKind::Unsupported,
+				"No backend available, did you remember to install one? https://github.com/WilliamVenner/gmcl_rekinect",
+			))
+		}
 	}
 
 	#[inline]
 	pub fn poll(&mut self) -> Option<KinectSkeleton> {
-		self.backend.poll()
+		self.backends.iter_mut().find_map(|backend| backend.backend.poll())
 	}
 }
