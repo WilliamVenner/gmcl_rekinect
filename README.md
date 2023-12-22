@@ -8,7 +8,7 @@
 # Features
 
 * Support for the Xbox 360 Kinect
-* Support for the Xbox One Kinect (thank you @figardo for letting me borrow one!)
+* Support for the Xbox One Kinect (thank you [@figardo](https://github.com/figardo) for letting me borrow one!)
 * Support for the x86-64 branch of Garry's Mod
 
 ### Caveats
