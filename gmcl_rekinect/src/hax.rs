@@ -5,7 +5,7 @@ use std::{cell::Cell, ffi::c_void, path::Path};
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
-enum GmodLuaInterfaceRealm {
+pub enum GmodLuaInterfaceRealm {
 	Client = 0,
 	Server = 1,
 	Menu = 2,
@@ -13,9 +13,9 @@ enum GmodLuaInterfaceRealm {
 
 #[link(name = "gmcl_rekinect_cpp", kind = "static")]
 extern "C" {
-	fn get_lua_shared(create_interface_fn: *const ()) -> *mut c_void;
-	fn open_lua_interface(i_lua_shared: *mut c_void, realm: GmodLuaInterfaceRealm) -> *mut c_void;
-	fn get_lua_state(c_lua_interface: *mut c_void) -> *mut c_void;
+	pub fn get_lua_shared(create_interface_fn: *const ()) -> *mut c_void;
+	pub fn open_lua_interface(i_lua_shared: *mut c_void, realm: GmodLuaInterfaceRealm) -> *mut c_void;
+	pub fn get_lua_state(c_lua_interface: *mut c_void) -> *mut c_void;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -39,7 +39,7 @@ pub fn lua_state() -> Option<gmod::lua::State> {
 
 macro_rules! dll_paths {
 	($($func:ident => $bin:literal / $linux_main_branch:literal),*) => {
-		$(fn $func() -> &'static str {
+		$(pub fn $func() -> &'static str {
 			match () {
 				_ if cfg!(all(windows, target_pointer_width = "64")) => concat!("bin/win64/", $bin, ".dll"),
 				_ if cfg!(all(target_os = "linux", target_pointer_width = "64")) => concat!("bin/linux64/", $bin, ".so"),
@@ -71,7 +71,8 @@ macro_rules! dll_paths {
 }
 dll_paths! {
 	client_dll_path => "client"/"client",
-	lua_shared_dll_path => "lua_shared"/"lua_shared"
+	lua_shared_dll_path => "lua_shared"/"lua_shared",
+	lua_shared_srv_dll_path => "lua_shared"/"lua_shared_srv"
 }
 
 #[cfg_attr(target_pointer_width = "64", abi("fastcall"))]

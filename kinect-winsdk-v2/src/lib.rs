@@ -1,10 +1,10 @@
 #![cfg(windows)]
 
-use kinect::{KinectBackend, KinectSkeleton, KinectSkeletonBones, KinectTrackedSkeleton};
+use kinect::{KinectBackend, KinectExtendedSkeletonBones, KinectSkeleton, KinectSkeletonBones, KinectTrackedExtendedSkeleton, KinectTrackedSkeleton};
 use std::{
 	ffi::c_void,
 	marker::PhantomData,
-	mem::ManuallyDrop,
+	mem::{ManuallyDrop, MaybeUninit},
 	ops::{Add, Div},
 	os::windows::io::AsRawHandle,
 };
@@ -20,12 +20,8 @@ use windows::{
 const BONE_COUNT: usize = 25;
 
 #[inline]
-fn convert_kinect_coordinate_space_to_gmod(vector: &mut Vector3) {
-	*vector = Vector3 {
-		x: -vector.x,
-		y: vector.z,
-		z: vector.y,
-	};
+fn convert_kinect_coordinate_space_to_gmod(vector: Vector3) -> [f32; 3] {
+	[-vector.x, vector.z, vector.y]
 }
 
 #[link(name = "kinect_winsdk_v2_cpp", kind = "static")]
@@ -45,13 +41,14 @@ unsafe impl<T> Sync for SendPtr<T> {}
 #[repr(C)]
 struct WinSdkKinectV2SkeletonUpdate {
 	skeleton_index: usize,
-	skeleton: *const SensorBones,
+	tracked: bool,
+	skeleton: MaybeUninit<SensorBones>,
 }
 impl WinSdkKinectV2SkeletonUpdate {
 	#[inline]
 	fn skeleton(&self) -> Option<&SensorBones> {
-		if !self.skeleton.is_null() {
-			Some(unsafe { &*self.skeleton })
+		if self.tracked {
+			Some(unsafe { self.skeleton.assume_init_ref() })
 		} else {
 			None
 		}
@@ -75,9 +72,8 @@ struct Vector3 {
 }
 impl Vector3 {
 	#[inline]
-	fn into_gmod(mut self) -> [f32; 3] {
-		convert_kinect_coordinate_space_to_gmod(&mut self);
-		[self.x, self.y, self.z]
+	fn into_gmod(self) -> [f32; 3] {
+		convert_kinect_coordinate_space_to_gmod(self)
 	}
 }
 impl Add for Vector3 {
@@ -226,30 +222,42 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 				if let Some(skeleton) = event.skeleton() {
 					self.skeleton = Some(event.skeleton_index);
 
-					let bones = unsafe { skeleton.named };
-					return Some(KinectSkeleton::Tracked(KinectTrackedSkeleton::from_named_bones(KinectSkeletonBones {
-						spine: bones.spine_mid.into_gmod(),
-						hip_center: ((bones.hip_left + bones.hip_right) / 2.0).into_gmod(),
-						shoulder_center: ((bones.shoulder_left + bones.shoulder_right) / 2.0).into_gmod(),
+					let bones = unsafe { &skeleton.named };
 
-						head: bones.head.into_gmod(),
-						shoulder_left: bones.shoulder_left.into_gmod(),
-						elbow_left: bones.elbow_left.into_gmod(),
-						wrist_left: bones.wrist_left.into_gmod(),
-						hand_left: bones.hand_left.into_gmod(),
-						shoulder_right: bones.shoulder_right.into_gmod(),
-						elbow_right: bones.elbow_right.into_gmod(),
-						wrist_right: bones.wrist_right.into_gmod(),
-						hand_right: bones.hand_right.into_gmod(),
-						hip_left: bones.hip_left.into_gmod(),
-						knee_left: bones.knee_left.into_gmod(),
-						ankle_left: bones.ankle_left.into_gmod(),
-						foot_left: bones.foot_left.into_gmod(),
-						hip_right: bones.hip_right.into_gmod(),
-						knee_right: bones.knee_right.into_gmod(),
-						ankle_right: bones.ankle_right.into_gmod(),
-						foot_right: bones.foot_right.into_gmod(),
-					})));
+					return Some(KinectSkeleton::TrackedExtended(
+						KinectTrackedSkeleton::from_named_bones(KinectSkeletonBones {
+							spine: bones.spine_mid.into_gmod(),
+							hip_center: ((bones.hip_left + bones.hip_right) / 2.0).into_gmod(),
+							shoulder_center: ((bones.shoulder_left + bones.shoulder_right) / 2.0).into_gmod(),
+
+							head: bones.head.into_gmod(),
+							shoulder_left: bones.shoulder_left.into_gmod(),
+							elbow_left: bones.elbow_left.into_gmod(),
+							wrist_left: bones.wrist_left.into_gmod(),
+							hand_left: bones.hand_left.into_gmod(),
+							shoulder_right: bones.shoulder_right.into_gmod(),
+							elbow_right: bones.elbow_right.into_gmod(),
+							wrist_right: bones.wrist_right.into_gmod(),
+							hand_right: bones.hand_right.into_gmod(),
+							hip_left: bones.hip_left.into_gmod(),
+							knee_left: bones.knee_left.into_gmod(),
+							ankle_left: bones.ankle_left.into_gmod(),
+							foot_left: bones.foot_left.into_gmod(),
+							hip_right: bones.hip_right.into_gmod(),
+							knee_right: bones.knee_right.into_gmod(),
+							ankle_right: bones.ankle_right.into_gmod(),
+							foot_right: bones.foot_right.into_gmod(),
+						}),
+						KinectTrackedExtendedSkeleton::from_named_bones(KinectExtendedSkeletonBones {
+							hand_tip_left: bones.hand_tip_left.into_gmod(),
+							thumb_left: bones.thumb_left.into_gmod(),
+							hand_tip_right: bones.hand_tip_right.into_gmod(),
+							thumb_right: bones.thumb_right.into_gmod(),
+							neck: bones.neck.into_gmod(),
+							spine_base: bones.spine_base.into_gmod(),
+							spine_shoulder: bones.spine_shoulder.into_gmod(),
+						}),
+					));
 				} else if self.skeleton.is_some() {
 					self.skeleton = None;
 					return Some(KinectSkeleton::Untracked);

@@ -10,11 +10,27 @@
 * Support for the Xbox 360 Kinect
 * Support for the Xbox One Kinect (thank you [@figardo](https://github.com/figardo) for letting me borrow one!)
 * Support for the x86-64 branch of Garry's Mod
+* Introduces the following extra bones from the Xbox One Kinect:
+
+```lua
+SENSORBONE.SPINE_BASE = 20
+SENSORBONE.NECK = 21
+SENSORBONE.SPINE_SHOULDER = 22
+SENSORBONE.HAND_TIP_LEFT = 23
+SENSORBONE.THUMB_LEFT = 24
+SENSORBONE.HAND_TIP_RIGHT = 25
+SENSORBONE.THUMB_RIGHT = 26
+```
+
+I haven't been able to do anything interesting with them yet.
+
+If you make anything with the extra bones, let me know!
 
 ### Caveats
 
 * gmcl_rekinect does not modify the menu state, so the Kinect icon in the bottom right of the Gmod menu will not be visible.
 * `motionsensor.GetColourMaterial()` is not implemented.
+* The module also needs to be installed serverside for Xbox One Kinect extended bones support to work.
 
 # Requirements
 

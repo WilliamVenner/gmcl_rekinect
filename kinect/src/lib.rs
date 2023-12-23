@@ -1,16 +1,20 @@
 pub const SKELETON_BONE_COUNT: usize = 20;
+pub const EXTENDED_SKELETON_BONE_COUNT: usize = 7;
 
 pub type KinectSkeletonRawBones = [[f32; 3]; SKELETON_BONE_COUNT];
+pub type KinectExtendedSkeletonRawBones = [[f32; 3]; EXTENDED_SKELETON_BONE_COUNT];
 
 pub trait KinectBackend {
 	fn poll(&mut self) -> Option<KinectSkeleton>;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 #[allow(clippy::large_enum_variant)]
 pub enum KinectSkeleton {
+	#[default]
 	Untracked,
 	Tracked(KinectTrackedSkeleton),
+	TrackedExtended(KinectTrackedSkeleton, KinectTrackedExtendedSkeleton),
 }
 
 #[derive(Clone, Copy)]
@@ -76,6 +80,56 @@ pub struct KinectSkeletonBones {
 	pub foot_right: [f32; 3],
 }
 
+#[derive(Clone, Copy)]
+pub union KinectTrackedExtendedSkeleton {
+	raw_bones: KinectExtendedSkeletonRawBones,
+	bones: KinectExtendedSkeletonBones,
+}
+impl KinectTrackedExtendedSkeleton {
+	#[inline(always)]
+	pub fn from_raw_bones(raw_bones: KinectExtendedSkeletonRawBones) -> Self {
+		Self { raw_bones }
+	}
+
+	#[inline(always)]
+	pub fn from_named_bones(bones: KinectExtendedSkeletonBones) -> Self {
+		Self { bones }
+	}
+
+	#[inline(always)]
+	pub fn raw_bones(&self) -> &KinectExtendedSkeletonRawBones {
+		unsafe { &self.raw_bones }
+	}
+
+	#[inline(always)]
+	pub fn bones(&self) -> &KinectExtendedSkeletonBones {
+		unsafe { &self.bones }
+	}
+}
+impl std::fmt::Debug for KinectTrackedExtendedSkeleton {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.bones().fmt(f)
+	}
+}
+impl Default for KinectTrackedExtendedSkeleton {
+	fn default() -> Self {
+		Self {
+			raw_bones: [[0.0; 3]; EXTENDED_SKELETON_BONE_COUNT],
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct KinectExtendedSkeletonBones {
+	pub spine_base: [f32; 3],
+	pub neck: [f32; 3],
+	pub spine_shoulder: [f32; 3],
+	pub hand_tip_left: [f32; 3],
+	pub thumb_left: [f32; 3],
+	pub hand_tip_right: [f32; 3],
+	pub thumb_right: [f32; 3],
+}
+
 pub struct DynKinectBackend {
 	backend: Box<dyn KinectBackend>,
 	_lib: libloading::Library,
@@ -122,6 +176,7 @@ impl Kinect {
 				for backend in [$backend, concat!("garrysmod/lua/bin/", $backend)] {
 					if let Some(backend) = unsafe { DynKinectBackend::load(backend) } {
 						backends.push(backend);
+						break;
 					}
 				}
 			};

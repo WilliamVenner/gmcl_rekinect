@@ -11,7 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 kinect = { path = "../kinect" }
 gmod = "17"
-memmap = "0.7"
 libloading = "0.8"
 ctor = "0.2"
 log = "0.4"

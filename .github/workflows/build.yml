@@ -27,15 +27,17 @@ jobs:
         mkdir release\bin
         mkdir release\gmcl_rekinect
 
-        mv target\i686-pc-windows-msvc\release\rekinector.exe release\bin\rekinector_win32.exe
-        mv target\i686-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmcl_rekinect_win32.dll
-        mv target\i686-pc-windows-msvc\release\rekinect_winsdk_v2.dll release\gmcl_rekinect\rekinect_winsdk_v2_win32.dll
-        mv target\i686-pc-windows-msvc\release\rekinect_winsdk_v1.dll release\gmcl_rekinect\rekinect_winsdk_v1_win32.dll
+        cp target\i686-pc-windows-msvc\release\rekinector.exe release\bin\rekinector_win32.exe
+        cp target\i686-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmcl_rekinect_win32.dll
+        cp target\i686-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmsv_rekinect_win32.dll
+        cp target\i686-pc-windows-msvc\release\rekinect_winsdk_v2.dll release\gmcl_rekinect\rekinect_winsdk_v2_win32.dll
+        cp target\i686-pc-windows-msvc\release\rekinect_winsdk_v1.dll release\gmcl_rekinect\rekinect_winsdk_v1_win32.dll
 
-        mv target\x86_64-pc-windows-msvc\release\rekinector.exe release\bin\rekinector_win64.exe
-        mv target\x86_64-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmcl_rekinect_win64.dll
-        mv target\x86_64-pc-windows-msvc\release\rekinect_winsdk_v2.dll release\gmcl_rekinect\rekinect_winsdk_v2_win64.dll
-        mv target\x86_64-pc-windows-msvc\release\rekinect_winsdk_v1.dll release\gmcl_rekinect\rekinect_winsdk_v1_win64.dll
+        cp target\x86_64-pc-windows-msvc\release\rekinector.exe release\bin\rekinector_win64.exe
+        cp target\x86_64-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmcl_rekinect_win64.dll
+        cp target\x86_64-pc-windows-msvc\release\gmcl_rekinect.dll release\gmcl_rekinect\gmsv_rekinect_win64.dll
+        cp target\x86_64-pc-windows-msvc\release\rekinect_winsdk_v2.dll release\gmcl_rekinect\rekinect_winsdk_v2_win64.dll
+        cp target\x86_64-pc-windows-msvc\release\rekinect_winsdk_v1.dll release\gmcl_rekinect\rekinect_winsdk_v1_win64.dll
 
     - name: Create archive
       run: powershell Compress-Archive release/gmcl_rekinect/* release/bin/gmcl_rekinect_win.zip
