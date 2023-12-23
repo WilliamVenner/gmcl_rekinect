@@ -30,7 +30,6 @@ If you make anything with the extra bones, let me know!
 
 * gmcl_rekinect does not modify the menu state, so the Kinect icon in the bottom right of the Gmod menu will not be visible.
 * `motionsensor.GetColourMaterial()` is not implemented.
-* The module also needs to be installed serverside for Xbox One Kinect extended bones support to work.
 
 # Requirements
 
@@ -53,6 +52,13 @@ If you make anything with the extra bones, let me know!
 	<br/><br/>
 	<img alt="bin folder" src="https://github.com/WilliamVenner/gmcl_rekinect/assets/14863743/463665d7-ec79-4ec2-9867-6179e9afcb50">
 </p>
+
+# Server Installation
+
+**Please note that gmcl_rekinect does not require any server-side installation to work.** However, if you want to use the extra bones from the Xbox One Kinect, you'll need to install `exbones.lua` on your server:
+
+1. Download `exbones.lua` from the [Releases](https://github.com/WilliamVenner/gmcl_rekinect/releases) page.
+2. Copy it into your server's `garrysmod/lua/autorun/server/` directory.
 
 # Usage
 

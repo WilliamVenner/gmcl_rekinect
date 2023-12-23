@@ -90,7 +90,7 @@ local function init(serverSupportsExtendedBones)
 		end
 
 		if CLIENT then
-			chat.AddText(Color(0, 255, 0), "gmcl_rekinect: Server supports Xbox One Kinect extended bones.")
+			chat.AddText(Color(0, 255, 0), "gmcl_rekinect: Server supports Xbox One Kinect extra bones.")
 			local GetSkeleton = motionsensor.GetSkeleton
 
 			function motionsensor.GetSkeleton()
@@ -141,7 +141,7 @@ local function init(serverSupportsExtendedBones)
 	else
 		-- Pollyfill motionsensor.GetSkeleton
 		if CLIENT then
-			chat.AddText(Color(255, 0, 0), "gmcl_rekinect: Server does not support Xbox One Kinect extended bones.")
+			chat.AddText(Color(255, 0, 0), "gmcl_rekinect: Server does not support Xbox One Kinect extra bones.")
 
 			if not motionsensor.GetSkeleton then
 				function motionsensor.GetSkeleton()

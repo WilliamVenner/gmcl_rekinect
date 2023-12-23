@@ -77,7 +77,7 @@ unsafe fn motion_sensor_pos(lua: gmod::lua::State) -> i32 {
 	1
 }
 
-unsafe fn client_api(lua: gmod::lua::State) {
+pub unsafe fn init(lua: gmod::lua::State) {
 	lua.get_global(lua_string!("motionsensor"));
 	if lua.is_nil(-1) {
 		lua.create_table(0, 0);
@@ -116,10 +116,4 @@ unsafe fn client_api(lua: gmod::lua::State) {
 	lua.pop();
 
 	cusercmd::hook(lua);
-}
-
-pub unsafe fn init(lua: gmod::lua::State, is_client: bool) {
-	if is_client {
-		client_api(lua);
-	}
 }
