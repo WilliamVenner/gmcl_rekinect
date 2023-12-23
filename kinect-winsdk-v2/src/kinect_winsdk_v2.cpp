@@ -238,7 +238,7 @@ void WinSdkKinectV2::ProcessBody(IBody **ppBodies)
 				{
 					if (trackingStateChanged)
 					{
-						m_Callback({(uintptr_t)i, false}, m_pCallbackUserData);
+						m_Callback({(uintptr_t)i, NULL}, m_pCallbackUserData);
 					}
 				}
 				else
@@ -248,17 +248,14 @@ void WinSdkKinectV2::ProcessBody(IBody **ppBodies)
 
 					if (SUCCEEDED(hr))
 					{
-						WinSdkKinectV2SkeletonUpdate skeletonUpdate;
-						skeletonUpdate.tracked = true;
-						skeletonUpdate.skeletonIndex = (uintptr_t)i;
+						CameraSpacePoint positions[JointType_Count];
 
 						for (int j = 0; j < _countof(joints); ++j)
 						{
-							CameraSpacePoint *position = &joints[j].Position;
-							skeletonUpdate.skeleton[j] = Vector3{position->X, position->Y, position->Z};
+							positions[j] = joints[j].Position;
 						}
 
-						m_Callback(skeletonUpdate, m_pCallbackUserData);
+						m_Callback({(uintptr_t)i, positions}, m_pCallbackUserData);
 					}
 				}
 			}

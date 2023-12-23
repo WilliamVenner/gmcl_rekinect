@@ -4,7 +4,7 @@ use kinect::{KinectBackend, KinectExtendedSkeletonBones, KinectSkeleton, KinectS
 use std::{
 	ffi::c_void,
 	marker::PhantomData,
-	mem::{ManuallyDrop, MaybeUninit},
+	mem::ManuallyDrop,
 	ops::{Add, Div},
 	os::windows::io::AsRawHandle,
 };
@@ -41,14 +41,13 @@ unsafe impl<T> Sync for SendPtr<T> {}
 #[repr(C)]
 struct WinSdkKinectV2SkeletonUpdate {
 	skeleton_index: usize,
-	tracked: bool,
-	skeleton: MaybeUninit<SensorBones>,
+	skeleton: *const SensorBones,
 }
 impl WinSdkKinectV2SkeletonUpdate {
 	#[inline]
 	fn skeleton(&self) -> Option<&SensorBones> {
-		if self.tracked {
-			Some(unsafe { self.skeleton.assume_init_ref() })
+		if !self.skeleton.is_null() {
+			Some(unsafe { &*self.skeleton })
 		} else {
 			None
 		}

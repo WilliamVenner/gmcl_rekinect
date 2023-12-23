@@ -4,18 +4,10 @@
 
 extern "C"
 {
-	struct Vector3
-	{
-		float x;
-		float y;
-		float z;
-	};
-
 	struct WinSdkKinectV2SkeletonUpdate
 	{
 		uintptr_t skeletonIndex;
-		bool tracked;
-		Vector3 skeleton[JointType_Count];
+		CameraSpacePoint *skeleton;
 	};
 
 	typedef void (*WinSdkKinectV2Callback)(WinSdkKinectV2SkeletonUpdate, void *);
