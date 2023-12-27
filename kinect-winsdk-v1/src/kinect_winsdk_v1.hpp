@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <NuiApi.h>
+#include <atomic>
 
 extern "C"
 {
@@ -19,11 +20,12 @@ public:
 	WinSdkKinectV1(WinSdkKinectV1Callback callback, void *userdata);
 	~WinSdkKinectV1();
 
-	void Run();
+	HRESULT Run();
 
 	HRESULT MonitorSensors();
 
 	void *m_pCallbackUserData;
+	std::atomic<bool> m_bAvailable;
 
 private:
 	void Update(DWORD event);
@@ -66,7 +68,12 @@ extern "C" void WinSdkKinectV1_Destroy(WinSdkKinectV1 *pKinect)
 	}
 }
 
-extern "C" void WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
+extern "C" HRESULT WinSdkKinectV1_Run(WinSdkKinectV1 *pKinect)
 {
-	pKinect->Run();
+	return pKinect->Run();
+}
+
+extern "C" bool WinSdkKinectV1_Available(WinSdkKinectV1 *pKinect)
+{
+	return pKinect->m_bAvailable.load(std::memory_order_acquire);
 }

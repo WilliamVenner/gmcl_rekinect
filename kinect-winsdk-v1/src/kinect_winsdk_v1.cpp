@@ -14,7 +14,8 @@ WinSdkKinectV1::WinSdkKinectV1(
 	WinSdkKinectV1Callback callback, void *userdata) : m_hNextSkeletonEvent(INVALID_HANDLE_VALUE),
 													   m_pNuiSensor(NULL),
 													   m_Callback(callback),
-													   m_pCallbackUserData(userdata)
+													   m_pCallbackUserData(userdata),
+													   m_bAvailable(false)
 {
 	for (int i = 0; i < NUI_SKELETON_COUNT; ++i)
 	{
@@ -37,7 +38,7 @@ WinSdkKinectV1::~WinSdkKinectV1()
 	SafeRelease(m_pNuiSensor);
 }
 
-void WinSdkKinectV1::Run()
+HRESULT WinSdkKinectV1::Run()
 {
 	MSG msg = {0};
 
@@ -54,16 +55,27 @@ void WinSdkKinectV1::Run()
 		// Update() will check for Kinect events individually, in case more than one are signalled
 		DWORD event = MsgWaitForMultipleObjects(eventCount, hEvents, FALSE, INFINITE, QS_ALLINPUT);
 
-		// Explicitly check the Kinect frame event since MsgWaitForMultipleObjects
-		// can return for other reasons even though it is signaled.
-		Update(WAIT_OBJECT_0 - event);
-
-		while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+		if (event == WAIT_OBJECT_0 + eventCount)
 		{
-			TranslateMessage(&msg);
-			DispatchMessageW(&msg);
+			if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+			{
+				TranslateMessage(&msg);
+				DispatchMessageW(&msg);
+			}
+		}
+		else if (event >= WAIT_OBJECT_0 && event < WAIT_OBJECT_0 + eventCount)
+		{
+			// Explicitly check the Kinect frame event since MsgWaitForMultipleObjects
+			// can return for other reasons even though it is signaled.
+			Update(WAIT_OBJECT_0 - event);
+		}
+		else
+		{
+			return HRESULT_FROM_WIN32(GetLastError());
 		}
 	}
+
+	return S_OK;
 }
 
 void WinSdkKinectV1::Update(DWORD event)
@@ -80,6 +92,8 @@ void CALLBACK WinSdkKinectV1::DeviceStatusChanged(HRESULT hrStatus, const OLECHA
 
 	if (kinect->m_pNuiSensor)
 	{
+		kinect->m_bAvailable.store(false, std::memory_order_release);
+
 		kinect->m_pNuiSensor->NuiShutdown();
 		kinect->m_pNuiSensor->Release();
 		kinect->m_pNuiSensor = NULL;
@@ -122,6 +136,7 @@ void CALLBACK WinSdkKinectV1::DeviceStatusChanged(HRESULT hrStatus, const OLECHA
 			if (SUCCEEDED(hr))
 			{
 				kinect->m_pNuiSensor = pNuiSensor;
+				kinect->m_bAvailable.store(true, std::memory_order_release);
 			}
 			else
 			{
@@ -179,6 +194,11 @@ HRESULT WinSdkKinectV1::MonitorSensors()
 		{
 			// Open a skeleton stream to receive skeleton data
 			hr = m_pNuiSensor->NuiSkeletonTrackingEnable(m_hNextSkeletonEvent, 0);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			m_bAvailable.store(true, std::memory_order_release);
 		}
 	}
 

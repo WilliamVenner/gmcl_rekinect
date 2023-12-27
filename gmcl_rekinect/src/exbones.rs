@@ -1,7 +1,8 @@
 use crate::{cusercmd, hax};
-use std::ffi::{c_char, c_void};
+use gmod::lua::LUA_OK;
+use std::ffi::{c_char, c_int, c_void};
 
-const EXBONES_LUA: *const c_char = concat!(include_str!("exbones.lua"), "\0").as_ptr() as *const _;
+static EXBONES_LUA: &str = concat!(include_str!("exbones.lua"), "\0");
 
 pub(super) unsafe fn init(lua: gmod::lua::State) {
 	let is_dedicated;
@@ -31,19 +32,31 @@ pub(super) unsafe fn init(lua: gmod::lua::State) {
 					panic!("Failed to get ILuaShared");
 				}
 				let c_lua_interface = hax::open_lua_interface(i_lua_shared, hax::GmodLuaInterfaceRealm::Server);
+				if c_lua_interface.is_null() {
+					panic!("Failed to get CLuaInterface");
+				}
 				lua_sv = hax::get_lua_state(c_lua_interface);
+				if lua_sv.is_null() {
+					panic!("Failed to get lua_State");
+				}
 			}
 
 			lua_call = lib
-				.get::<unsafe extern "C-unwind" fn(*mut c_void, nargs: i32, nresults: i32)>(b"lua_call\0")
+				.get::<unsafe extern "C-unwind" fn(*mut c_void, nargs: c_int, nresults: c_int)>(b"lua_call\0")
 				.expect("Failed to find lua_call in lua_shared_srv");
+
 			lual_loadstring = lib
-				.get::<unsafe extern "C-unwind" fn(*mut c_void, string: *const c_char)>(b"luaL_loadstring\0")
+				.get::<unsafe extern "C-unwind" fn(*mut c_void, string: *const c_char) -> c_int>(b"luaL_loadstring\0")
 				.expect("Failed to find luaL_loadstring in lua_shared_srv");
 		}
 
-		lual_loadstring(lua_sv, EXBONES_LUA);
+		let res = lual_loadstring(lua_sv, EXBONES_LUA.as_ptr() as *const _);
+		if res != LUA_OK {
+			panic!("luaL_loadstring exbones returned {res}");
+		}
 		lua_call(lua_sv, 0, 0);
+
+		drop(lib);
 	}
 
 	#[lua_function]
@@ -58,6 +71,6 @@ pub(super) unsafe fn init(lua: gmod::lua::State) {
 	lua.push_function(extended_bones_supported_callback);
 	lua.set_global(lua_string!("gmcl_rekinect_extended_bones_supported_callback"));
 
-	lua.load_string(EXBONES_LUA).unwrap();
+	lua.load_string(EXBONES_LUA.as_ptr() as *const _).unwrap();
 	lua.call(0, 0);
 }

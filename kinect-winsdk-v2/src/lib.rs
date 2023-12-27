@@ -28,7 +28,8 @@ fn convert_kinect_coordinate_space_to_gmod(vector: Vector3) -> [f32; 3] {
 extern "C" {
 	fn WinSdkKinectV2_Create(callback: CWinSdkKinectV2Callback, userdata: *mut c_void, res: &mut HRESULT) -> *mut c_void;
 	fn WinSdkKinectV2_Destroy(ptr: *mut c_void);
-	fn WinSdkKinectV2_Run(ptr: *mut c_void);
+	fn WinSdkKinectV2_Run(ptr: *mut c_void) -> HRESULT;
+	fn WinSdkKinectV2_Available(ptr: *mut c_void) -> bool;
 }
 
 type CWinSdkKinectV2Callback = extern "C" fn(WinSdkKinectV2SkeletonUpdate, *mut c_void);
@@ -142,6 +143,7 @@ struct NamedSensorBones {
 }
 
 struct WinSdkKinectV2<U> {
+	ptr: *mut c_void,
 	thread: ManuallyDrop<std::thread::JoinHandle<()>>,
 	_userdata: PhantomData<U>,
 }
@@ -159,6 +161,8 @@ impl<U> WinSdkKinectV2<U> {
 		let ptr = unsafe { WinSdkKinectV2_Create(callback, userdata, &mut res) };
 		if !ptr.is_null() && res.is_ok() {
 			Ok(Self {
+				ptr,
+
 				thread: ManuallyDrop::new({
 					let ptr = SendPtr(ptr);
 					let userdata = SendPtr(userdata);
@@ -167,12 +171,16 @@ impl<U> WinSdkKinectV2<U> {
 						.spawn(move || unsafe {
 							let ptr = { ptr };
 							let ptr = ptr.0;
-							WinSdkKinectV2_Run(ptr);
+							if let Err(err) = WinSdkKinectV2_Run(ptr).ok() {
+								log::error!("WinSdkKinectV2_Run() failed ({:?})", err);
+							}
 							WinSdkKinectV2_Destroy(ptr);
 
 							let userdata = { userdata };
 							let userdata = userdata.0;
 							drop(Box::from_raw(userdata as *mut U));
+
+							log::info!("WinSdkKinectV2 thread exited");
 						})
 						.unwrap()
 				}),
@@ -212,7 +220,7 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 	struct WinSdkKinectBackend {
 		rx: std::sync::mpsc::Receiver<WinSdkKinectV2SkeletonUpdate>,
 		skeleton: Option<usize>,
-		_inner: WinSdkKinectV2<std::sync::mpsc::SyncSender<WinSdkKinectV2SkeletonUpdate>>,
+		inner: WinSdkKinectV2<std::sync::mpsc::SyncSender<WinSdkKinectV2SkeletonUpdate>>,
 	}
 	impl KinectBackend for WinSdkKinectBackend {
 		fn poll(&mut self) -> Option<KinectSkeleton> {
@@ -264,11 +272,16 @@ pub extern "Rust" fn gmcl_rekinect_init(logger: &'static dyn log::Log) -> Result
 			}
 			None
 		}
+
+		#[inline]
+		fn available(&self) -> bool {
+			unsafe { WinSdkKinectV2_Available(self.inner.ptr) }
+		}
 	}
 
 	Ok(Box::new(WinSdkKinectBackend {
 		rx,
-		_inner: kinect,
+		inner: kinect,
 		skeleton: None,
 	}))
 }

@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <Kinect.h>
+#include <atomic>
 
 extern "C"
 {
@@ -22,9 +23,10 @@ public:
 	/// Initializes the default Kinect sensor
 	HRESULT InitializeDefaultSensor();
 
-	void Run();
+	HRESULT Run();
 
 	void *m_pCallbackUserData;
+	std::atomic<bool> m_bAvailable;
 
 private:
 	// Current Kinect
@@ -76,7 +78,12 @@ extern "C" void WinSdkKinectV2_Destroy(WinSdkKinectV2 *pKinect)
 	}
 }
 
-extern "C" void WinSdkKinectV2_Run(WinSdkKinectV2 *pKinect)
+extern "C" HRESULT WinSdkKinectV2_Run(WinSdkKinectV2 *pKinect)
 {
-	pKinect->Run();
+	return pKinect->Run();
+}
+
+extern "C" bool WinSdkKinectV2_Available(WinSdkKinectV2 *pKinect)
+{
+	return pKinect->m_bAvailable.load(std::memory_order_acquire);
 }

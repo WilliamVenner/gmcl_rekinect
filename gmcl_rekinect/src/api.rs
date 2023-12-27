@@ -5,11 +5,12 @@ use kinect::{KinectSkeleton, EXTENDED_SKELETON_BONE_COUNT, SKELETON_BONE_COUNT};
 static mut ORIGINAL_MOTION_SENSOR_POS: Option<LuaReference> = None;
 
 #[lua_function]
-unsafe fn start(_lua: gmod::lua::State) -> i32 {
+unsafe fn start(lua: gmod::lua::State) -> i32 {
 	if let Some(kinect) = rekinect::state() {
 		kinect.active = true;
 	}
 
+	lua.push_boolean(true);
 	1
 }
 
@@ -24,14 +25,13 @@ unsafe fn stop(_lua: gmod::lua::State) -> i32 {
 
 #[lua_function]
 unsafe fn is_active(lua: gmod::lua::State) -> i32 {
-	lua.push_boolean(rekinect::state().map(|kinect| kinect.active).unwrap_or(false));
+	lua.push_boolean(rekinect::state().is_some_and(|kinect| kinect.active));
 	1
 }
 
 #[lua_function]
 unsafe fn is_available(lua: gmod::lua::State) -> i32 {
-	// TODO sync this with actual availability
-	lua.push_boolean(rekinect::state().is_some());
+	lua.push_boolean(rekinect::state().is_some_and(|kinect| kinect.available()));
 	1
 }
 

@@ -28,6 +28,11 @@ impl KinectState {
 
 		self.skeleton = update;
 	}
+
+	#[inline]
+	pub fn available(&self) -> bool {
+		self.inner.available()
+	}
 }
 
 #[lua_function]

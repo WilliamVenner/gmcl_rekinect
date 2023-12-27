@@ -19,7 +19,8 @@ WinSdkKinectV2::WinSdkKinectV2(WinSdkKinectV2Callback callback, void *userdata) 
 																				  m_Callback(callback),
 																				  m_pCallbackUserData(userdata),
 																				  m_AvailablityChangedEvent(INVALID_WAITABLE_HANDLE),
-																				  m_BodyFrameArrivedEvent(INVALID_WAITABLE_HANDLE)
+																				  m_BodyFrameArrivedEvent(INVALID_WAITABLE_HANDLE),
+																				  m_bAvailable(false)
 {
 	for (int i = 0; i < BODY_COUNT; ++i)
 	{
@@ -54,7 +55,7 @@ WinSdkKinectV2::~WinSdkKinectV2()
 	SafeRelease(m_pKinectSensor);
 }
 
-void WinSdkKinectV2::Run()
+HRESULT WinSdkKinectV2::Run()
 {
 	MSG msg = {0};
 
@@ -72,18 +73,39 @@ void WinSdkKinectV2::Run()
 		// Update() will check for Kinect events individually, in case more than one are signalled
 		DWORD event = MsgWaitForMultipleObjects(eventCount, hEvents, FALSE, INFINITE, QS_ALLINPUT);
 
-		Update(WAIT_OBJECT_0 - event);
-
-		while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+		if (event == WAIT_OBJECT_0 + eventCount)
 		{
-			TranslateMessage(&msg);
-			DispatchMessageW(&msg);
+			if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+			{
+				TranslateMessage(&msg);
+				DispatchMessageW(&msg);
+			}
+		}
+		else if (event >= WAIT_OBJECT_0 && event < WAIT_OBJECT_0 + eventCount)
+		{
+			Update(event - WAIT_OBJECT_0);
+		}
+		else
+		{
+			return HRESULT_FROM_WIN32(GetLastError());
 		}
 	}
+
+	return S_OK;
 }
 
 void WinSdkKinectV2::BodyFrameArrived()
 {
+	if (m_pKinectSensor)
+	{
+		// I don't understand how they managed to mess this part of the SDK up so badly, but this seems to be a hacky fix for this event just not working properly...
+		BOOLEAN bAvailable = FALSE;
+		if (SUCCEEDED(m_pKinectSensor->get_IsAvailable(&bAvailable)) && m_bAvailable.load(std::memory_order_relaxed) != !!bAvailable)
+		{
+			AvailableChanged();
+		}
+	}
+
 	if (!m_pBodyFrameReader)
 	{
 		return;
@@ -127,25 +149,34 @@ void WinSdkKinectV2::AvailableChanged()
 	if (SUCCEEDED(hr) && pAvailableChangedEvent)
 	{
 		BOOLEAN bAvailable = FALSE;
-		pAvailableChangedEvent->get_IsAvailable(&bAvailable);
+		hr = pAvailableChangedEvent->get_IsAvailable(&bAvailable);
 
-		if (!bAvailable)
+		if (SUCCEEDED(hr))
 		{
-			for (int i = 0; i < BODY_COUNT; ++i)
+			m_bAvailable.store(bAvailable, std::memory_order_release);
+
+			if (!bAvailable)
 			{
-				bool trackingStateChanged = m_SkeletonTrackingStates[i] != false;
-
-				m_SkeletonTrackingStates[i] = false;
-
-				if (trackingStateChanged)
+				for (int i = 0; i < BODY_COUNT; ++i)
 				{
-					m_Callback({(uintptr_t)i, NULL}, m_pCallbackUserData);
+					bool trackingStateChanged = m_SkeletonTrackingStates[i] != false;
+
+					m_SkeletonTrackingStates[i] = false;
+
+					if (trackingStateChanged)
+					{
+						m_Callback({(uintptr_t)i, NULL}, m_pCallbackUserData);
+					}
 				}
 			}
 		}
 	}
 
 	SafeRelease(pAvailableChangedEvent);
+
+	// Not sure why this is needed, but without it, the event is never "re-armed"
+	m_pKinectSensor->UnsubscribeIsAvailableChanged(m_AvailablityChangedEvent);
+	m_pKinectSensor->SubscribeIsAvailableChanged(&m_AvailablityChangedEvent);
 }
 
 void WinSdkKinectV2::Update(DWORD event)
@@ -175,14 +206,11 @@ HRESULT WinSdkKinectV2::InitializeDefaultSensor()
 		// Initialize the Kinect and get coordinate mapper and the body reader
 		IBodyFrameSource *pBodyFrameSource = NULL;
 
-		if (SUCCEEDED(hr))
-		{
-			hr = m_pKinectSensor->Open();
-		}
+		hr = m_pKinectSensor->SubscribeIsAvailableChanged(&m_AvailablityChangedEvent);
 
 		if (SUCCEEDED(hr))
 		{
-			hr = m_pKinectSensor->SubscribeIsAvailableChanged(&m_AvailablityChangedEvent);
+			hr = m_pKinectSensor->Open();
 		}
 
 		if (SUCCEEDED(hr))

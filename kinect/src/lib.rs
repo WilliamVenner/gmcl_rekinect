@@ -6,6 +6,7 @@ pub type KinectExtendedSkeletonRawBones = [[f32; 3]; EXTENDED_SKELETON_BONE_COUN
 
 pub trait KinectBackend {
 	fn poll(&mut self) -> Option<KinectSkeleton>;
+	fn available(&self) -> bool;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -173,7 +174,7 @@ impl Kinect {
 
 		macro_rules! try_load_backend {
 			($backend:expr) => {
-				for backend in [$backend, concat!("garrysmod/lua/bin/", $backend)] {
+				for backend in [concat!("garrysmod/lua/bin/", $backend), $backend] {
 					if let Some(backend) = unsafe { DynKinectBackend::load(backend) } {
 						backends.push(backend);
 						break;
@@ -205,5 +206,10 @@ impl Kinect {
 	#[inline]
 	pub fn poll(&mut self) -> Option<KinectSkeleton> {
 		self.backends.iter_mut().find_map(|backend| backend.backend.poll())
+	}
+
+	#[inline]
+	pub fn available(&self) -> bool {
+		self.backends.iter().any(|backend| backend.backend.available())
 	}
 }

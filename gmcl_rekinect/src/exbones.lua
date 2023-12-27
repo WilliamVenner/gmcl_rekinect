@@ -176,7 +176,9 @@ local function init(serverSupportsExtendedBones)
 		end
 	end
 
-	gmcl_rekinect_extended_bones_supported_callback(serverSupportsExtendedBones)
+	if gmcl_rekinect_extended_bones_supported_callback ~= nil then
+		gmcl_rekinect_extended_bones_supported_callback(serverSupportsExtendedBones)
+	end
 end
 
 local serverSupportsExtendedBones = SERVER or util.NetworkStringToID("gmcl_rekinect_extended_bones") ~= 0
