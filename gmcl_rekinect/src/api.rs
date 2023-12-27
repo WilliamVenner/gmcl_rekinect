@@ -80,6 +80,7 @@ unsafe fn motion_sensor_pos(lua: gmod::lua::State) -> i32 {
 pub unsafe fn init(lua: gmod::lua::State) {
 	lua.get_global(lua_string!("motionsensor"));
 	if lua.is_nil(-1) {
+		lua.pop();
 		lua.create_table(0, 0);
 		lua.set_global(lua_string!("motionsensor"));
 		lua.get_global(lua_string!("motionsensor"));

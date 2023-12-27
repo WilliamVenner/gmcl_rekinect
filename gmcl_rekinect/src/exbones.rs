@@ -11,7 +11,7 @@ pub(super) unsafe fn init(lua: gmod::lua::State) {
 		lua.get_field(-1, lua_string!("IsDedicated"));
 		lua.call(0, 1);
 		is_dedicated = lua.get_boolean(-1);
-		lua.pop();
+		lua.pop_n(2);
 	}
 
 	if !is_dedicated {

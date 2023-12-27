@@ -20,9 +20,15 @@ static mut GMOD13_OPEN: bool = false;
 unsafe fn init(lua: gmod::lua::State) {
 	log::info!(concat!("gmcl_rekinect v", env!("CARGO_PKG_VERSION"), " loaded!"));
 
-	api::init(lua);
-	exbones::init(lua);
-	rekinect::init(lua);
+	lua_stack_guard!(lua => {
+		api::init(lua);
+	});
+	lua_stack_guard!(lua => {
+		exbones::init(lua);
+	});
+	lua_stack_guard!(lua => {
+		rekinect::init(lua);
+	});
 }
 
 unsafe fn shutdown() {
