@@ -2,9 +2,6 @@
 
 // cargo build --target i686-pc-windows-msvc --all && cp target/i686-pc-windows-msvc/debug/gmcl_rekinect.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\gmcl_rekinect_win32.dll" && cp target/i686-pc-windows-msvc/debug/rekinect_winsdk_v2.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\rekinect_winsdk_v2_win32.dll" && cp target/i686-pc-windows-msvc/debug/rekinect_winsdk_v1.dll "D:\Steam\steamapps\common\GarrysMod\garrysmod\lua\bin\rekinect_winsdk_v1_win32.dll"
 
-#![feature(array_chunks)]
-#![feature(c_unwind)]
-#![feature(option_get_or_insert_default)]
 #![feature(thread_id_value)]
 #![allow(clippy::let_and_return)]
 
