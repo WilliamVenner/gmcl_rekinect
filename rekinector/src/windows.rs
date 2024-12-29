@@ -94,6 +94,12 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 			));
 		}
 
+		println!("Waiting for clientside initialization...");
+
+		while self.process.find_module_by_name("client")?.is_none() {
+			std::thread::sleep(Duration::from_secs(1));
+		}
+
 		println!("Waiting for Lua initialization...");
 
 		while self.process.find_module_by_name("lua_shared")?.is_none() {
