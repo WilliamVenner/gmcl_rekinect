@@ -21,3 +21,6 @@ windows = { version = "0.52", features = [
 	"Wdk_System",
 	"Wdk",
 ] }
+
+[dependencies]
+eyre = "0.6"

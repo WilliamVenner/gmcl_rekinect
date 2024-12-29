@@ -1,8 +1,14 @@
-use crate::InjectedGmod;
-
 use super::Gmod;
+use crate::InjectedGmod;
 use dll_syringe::process::Process;
-use std::{ffi::OsStr, mem::size_of, os::windows::io::AsRawHandle, path::Path, time::Duration};
+use eyre::OptionExt;
+use std::{
+	ffi::OsStr,
+	mem::size_of,
+	os::windows::io::AsRawHandle,
+	path::{Path, PathBuf},
+	time::Duration,
+};
 use windows::{
 	Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation},
 	Win32::{
@@ -27,57 +33,49 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 			.filter_map(|process| {
 				let handle = HANDLE(process.as_raw_handle() as isize);
 
-				unsafe {
-					let mut exe_path = [0u8; MAX_PATH];
-					let len = GetModuleFileNameExA(handle, HMODULE(0), &mut exe_path);
-					if len == 0 {
-						return None;
-					}
-					let exe_path = &exe_path[..len as usize];
-					let exe_path = OsStr::from_encoded_bytes_unchecked(exe_path);
-					let exe_path = Path::new(exe_path);
+				let exe_path = get_process_exe_path(handle).ok()?;
 
-					if exe_path.extension() != Some(OsStr::new("exe")) {
-						return None;
-					}
+				if exe_path.extension() != Some(OsStr::new("exe")) {
+					return None;
+				}
 
-					let Some(exe) = exe_path.file_name() else {
-						return None;
+				let Some(exe) = exe_path.file_name() else {
+					return None;
+				};
+
+				let Some(mut exe_path) = exe_path.parent() else {
+					return None;
+				};
+
+				if exe_path.file_name() == Some(OsStr::new("win64")) {
+					exe_path = match exe_path.parent().and_then(|p| p.parent()) {
+						Some(p) => p,
+						None => return None,
 					};
+				}
 
-					let Some(mut exe_path) = exe_path.parent() else {
-						return None;
-					};
+				let Ok(is_x86) = is_x86_process(handle) else {
+					return None;
+				};
 
-					if exe_path.file_name() == Some(OsStr::new("win64")) {
-						exe_path = match exe_path.parent().and_then(|p| p.parent()) {
-							Some(p) => p,
-							None => return None,
-						};
-					}
+				// Check that this isn't a subprocess
+				let Ok(false) = is_subprocess(handle, exe) else {
+					return None;
+				};
 
-					let Ok(is_x86) = is_x86_process(handle) else {
-						return None;
-					};
+				let mut garrysmod_path = exe_path.join("garrysmod");
 
-					// Check that this isn't a subprocess
-					let Ok(false) = is_subprocess(handle, exe) else {
-						return None;
-					};
-
-					let mut garrysmod_path = exe_path.join("garrysmod");
-
-					if garrysmod_path.is_dir() {
-						return Some(Gmod {
-							process,
-							gmcl_rekinect: {
-								garrysmod_path.push("lua");
-								garrysmod_path.push("bin");
-								garrysmod_path.push(format!("gmcl_rekinect_win{}.dll", if is_x86 { "32" } else { "64" }));
-								garrysmod_path
-							},
-						});
-					}
+				if garrysmod_path.is_dir() {
+					return Some(Gmod {
+						process,
+						gmod_dir: exe_path.to_owned(),
+						gmcl_rekinect: {
+							garrysmod_path.push("lua");
+							garrysmod_path.push("bin");
+							garrysmod_path.push(format!("gmcl_rekinect_win{}.dll", if is_x86 { "32" } else { "64" }));
+							garrysmod_path
+						},
+					});
 				}
 
 				None
@@ -89,9 +87,11 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 		self.process.pid().ok().map(|pid| pid.get())
 	}
 
-	pub fn inject(self) -> Result<InjectedGmod<dll_syringe::process::OwnedProcessModule>, Box<dyn std::error::Error>> {
+	pub fn inject(&self) -> eyre::Result<InjectedGmod<dll_syringe::process::OwnedProcessModule>> {
 		if !self.gmcl_rekinect.is_file() {
-			return Err("You forgot to install the gmcl_rekinect binary module, please read the installation instructions.".into());
+			return Err(eyre::eyre!(
+				"You forgot to install the gmcl_rekinect binary module, please read the installation instructions."
+			));
 		}
 
 		println!("Waiting for Lua initialization...");
@@ -100,23 +100,23 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 			std::thread::sleep(Duration::from_secs(1));
 		}
 
-		dll_syringe::Syringe::for_process(self.process)
-			.find_or_inject(&self.gmcl_rekinect)
-			.map_err(Into::into)
-			.and_then(|injected| injected.try_to_owned().map_err(Into::into))
-			.map(|injected| InjectedGmod { process: injected })
+		Ok(InjectedGmod {
+			process: dll_syringe::Syringe::for_process(self.process.try_clone()?)
+				.find_or_inject(&self.gmcl_rekinect)?
+				.try_to_owned()?,
+		})
 	}
 }
 
 impl InjectedGmod<dll_syringe::process::OwnedProcessModule> {
 	pub fn wait(self) {
-		let sync_res: Result<(), std::io::Error> = (|| unsafe {
+		let sync_res: eyre::Result<()> = (|| unsafe {
 			const SYNCHRONIZE: PROCESS_ACCESS_RIGHTS = PROCESS_ACCESS_RIGHTS(0x00100000);
 
 			let sync = OpenProcess(SYNCHRONIZE, BOOL::from(false), self.process.process().pid()?.get() as _)?;
 
 			if WaitForSingleObject(sync, INFINITE) == WAIT_FAILED {
-				return Err(std::io::Error::last_os_error())?;
+				return Err(eyre::eyre!(std::io::Error::last_os_error()));
 			}
 
 			Ok(())
@@ -132,7 +132,7 @@ impl InjectedGmod<dll_syringe::process::OwnedProcessModule> {
 	}
 }
 
-fn is_x86_process(process: HANDLE) -> Result<bool, std::io::Error> {
+fn is_x86_process(process: HANDLE) -> eyre::Result<bool> {
 	unsafe {
 		let mut system_info: SYSTEM_INFO = core::mem::zeroed();
 		GetNativeSystemInfo(&mut system_info);
@@ -148,7 +148,7 @@ fn is_x86_process(process: HANDLE) -> Result<bool, std::io::Error> {
 	}
 }
 
-fn is_subprocess(process: HANDLE, process_name: &OsStr) -> Result<bool, std::io::Error> {
+fn is_subprocess(process: HANDLE, process_name: &OsStr) -> eyre::Result<bool> {
 	Ok(unsafe {
 		let mut info: PROCESS_BASIC_INFORMATION = core::mem::zeroed();
 		NtQueryInformationProcess(
@@ -170,20 +170,23 @@ fn is_subprocess(process: HANDLE, process_name: &OsStr) -> Result<bool, std::io:
 			info.InheritedFromUniqueProcessId as _,
 		)?;
 
-		// Get the parent's executable name
+		let exe_path = get_process_exe_path(parent)?;
+		let exe = exe_path.file_name().ok_or_eyre("Failed to get parent executable name")?;
+
+		exe == process_name
+	})
+}
+
+fn get_process_exe_path(process: HANDLE) -> eyre::Result<PathBuf> {
+	unsafe {
 		let mut exe_path = [0u8; MAX_PATH];
-		let len = GetModuleFileNameExA(parent, HMODULE(0), &mut exe_path);
+		let len = GetModuleFileNameExA(process, HMODULE(0), &mut exe_path);
 		if len == 0 {
-			return Err(std::io::Error::last_os_error());
+			return Err(eyre::eyre!(std::io::Error::last_os_error()));
 		}
 		let exe_path = &exe_path[..len as usize];
 		let exe_path = OsStr::from_encoded_bytes_unchecked(exe_path);
 		let exe_path = Path::new(exe_path);
-		let exe = match exe_path.file_name() {
-			Some(exe) => exe,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to get parent executable name")),
-		};
-
-		exe == process_name
-	})
+		Ok(exe_path.to_owned())
+	}
 }
