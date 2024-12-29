@@ -111,8 +111,8 @@ cluamanager_detours! {
 		trampoline: CLIENT_CLUAMANAGER_STARTUP,
 		sigs: client_cluamanager_startup_sig => {
 			// string search: "Clientside Lua startup!"
-			cfg!(all(target_pointer_width = "64", target_os = "windows")) => "48 89 5C 24 ? 48 89 74 24 ? 57 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 84 24 ? ? ? ? 48 8B F1 48 8D 0D ? ? ? ? FF 15 ? ? ? ? E8 ? ? ? ?",
-			cfg!(all(target_pointer_width = "32", target_os = "windows")) => "55 8B EC 81 EC ? ? ? ? 53 68 ? ? ? ? 8B D9 FF 15 ? ? ? ? 83 C4 04 E8 ? ? ? ? D9 05 ? ? ? ? 68 ? ? ? ?"
+			cfg!(all(target_pointer_width = "64", target_os = "windows")) => "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC 60 48 8B 05 ? ? ? ? 48 33 C4 48 89 44 24 ? 48 8B F1 48 8D 0D ? ? ? ? FF 15 ? ? ? ? E8 ? ? ? ? F3 0F 10 0D",
+			cfg!(all(target_pointer_width = "32", target_os = "windows")) => "55 8B EC 83 EC 18 53 68 ? ? ? ? 8B D9 FF 15 ? ? ? ? 83 C4 04 E8 ? ? ? ? D9 05 ? ? ? ? 68 ? ? ? ? 51 8B 10 8B C8 D9 1C 24"
 		}
 	}
 }
