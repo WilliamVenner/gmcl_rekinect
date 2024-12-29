@@ -24,13 +24,7 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 	pub fn find() -> Option<Self> {
 		dll_syringe::process::OwnedProcess::find_all_by_name("gmod.exe")
 			.into_iter()
-			.map(|gmod| (gmod, false))
-			.chain(
-				dll_syringe::process::OwnedProcess::find_all_by_name("hl2.exe")
-					.into_iter()
-					.map(|hl2| (hl2, true)),
-			)
-			.filter_map(|(process, is_hl2)| {
+			.filter_map(|process| {
 				let handle = HANDLE(process.as_raw_handle() as isize);
 
 				unsafe {
@@ -55,8 +49,7 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 						return None;
 					};
 
-					if !is_hl2 {
-						// gmod.exe is stored in bin/win64/
+					if exe_path.file_name() == Some(OsStr::new("win64")) {
 						exe_path = match exe_path.parent().and_then(|p| p.parent()) {
 							Some(p) => p,
 							None => return None,
@@ -97,7 +90,12 @@ impl Gmod<dll_syringe::process::OwnedProcess> {
 	}
 
 	pub fn inject(self) -> Result<InjectedGmod<dll_syringe::process::OwnedProcessModule>, Box<dyn std::error::Error>> {
+		if !self.gmcl_rekinect.is_file() {
+			return Err("You forgot to install the gmcl_rekinect binary module, please read the installation instructions.".into());
+		}
+
 		println!("Waiting for Lua initialization...");
+
 		while self.process.find_module_by_name("lua_shared")?.is_none() {
 			std::thread::sleep(Duration::from_secs(1));
 		}
