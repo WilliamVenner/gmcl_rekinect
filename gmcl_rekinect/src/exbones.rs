@@ -33,7 +33,8 @@ pub(super) unsafe fn init(lua: gmod::lua::State) {
 				}
 				let c_lua_interface = hax::open_lua_interface(i_lua_shared, hax::GmodLuaInterfaceRealm::Server);
 				if c_lua_interface.is_null() {
-					panic!("Failed to get CLuaInterface");
+					// If there's no server state, then we're connected to a non-dedicated server.
+					return;
 				}
 				lua_sv = hax::get_lua_state(c_lua_interface);
 				if lua_sv.is_null() {
