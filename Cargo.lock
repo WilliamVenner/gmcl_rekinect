@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "gmcl_rekinect"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "cc",
  "ctor",
